@@ -115,7 +115,7 @@ publicRouter.get('/assessments/:code', async (req, res) => {
   }
   const responses = await prisma.response.findMany({
     where: { assessmentId: assessment.id },
-    select: { userId: true },
+    select: { id: true, userId: true },
   });
   // 已测人数：有登录 userId 的按 userId 去重，匿名答卷按条计
   const fillCount = new Set(responses.map(r => r.userId ?? `anon-${r.id}`)).size;

@@ -1,12 +1,15 @@
 # 寻心理测评平台 - Docker Compose 部署（q.xunxinli.com）
-# 注意：服务器已有其他站点/nginx 占用 80/443，
-# 因此容器端口不直接暴露到宿主机 80/443，
-# 而是由宿主机现有 nginx 反代到 127.0.0.1:8080（前端容器）。
+# 注意：
+#  - 服务器已有其他站点/nginx 占用 80/443，
+#    因此前端容器映射到 127.0.0.1:8080，由宿主机现有 nginx 反代。
+#  - 数据库使用 compose 自带 MySQL 容器（独立隔离，数据存 volume mysql_data），
+#    与服务器其他项目的 MySQL 互不影响。首次部署执行
+#    docker compose exec server npx prisma db push 建表。
 # 使用: docker compose up -d --build
 version: "3.8"
 
 services:
-  # MySQL 数据库
+  # MySQL 数据库（独立容器，与服务器其他项目隔离）
   mysql:
     image: mysql:8.0
     container_name: xunxinli-mysql

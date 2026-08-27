@@ -74,21 +74,24 @@ npm run dev
 > - 容器内部服务：MySQL(3306) / 后端(3001) / 前端 Nginx(80)
 > - 仅前端容器映射到宿主机回环 `127.0.0.1:8080`
 > - **宿主机现有 nginx 负责 80/443 + 腾讯云 SSL 证书，反代到 `127.0.0.1:8080`**
-> - 数据库用 compose 自带 MySQL 容器（数据存 volume `mysql_data`）
+> - **数据库用 compose 自带 MySQL 容器**（独立隔离，数据存 volume `mysql_data`），与服务器其他项目互不影响
 
 ```bash
 # 1. 克隆代码到服务器（与现有站点目录分离）
-mkdir -p /opt/xunxinli && cd /opt/xunxinli
-git clone <你的仓库地址> .
+mkdir -p /data/q.xunxinli && cd /data/q.xunxinli
+git clone git@github.com:sunking18/xunxinli-assessment.git .
 
 # 2. 配置环境变量（务必修改 JWT_SECRET、数据库密码）
 cp .env.example .env
-vim .env   # 修改 MYSQL_PASSWORD / JWT_SECRET / WECHAT_* 等
+vim .env   # 修改 MYSQL_PASSWORD / JWT_SECRET / ADMIN_PASSWORD 等
 
 # 3. 构建并启动（前端容器监听宿主机 127.0.0.1:8080）
 docker compose up -d --build
 
-# 4. 验证容器状态
+# 4. 首次部署：用 Prisma 在容器内 MySQL 建表（数据库 xunxinli 已自动创建）
+docker compose exec server npx prisma db push
+
+# 5. 验证
 docker compose ps
 curl -fsS http://127.0.0.1:8080/api/health && echo " 前端+后端 OK"
 ```

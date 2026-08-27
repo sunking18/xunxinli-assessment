@@ -83,6 +83,9 @@ export interface GeneratedReport {
     key: string; cn: string; en: string; tag: string; emoji: string; avatarName: string; color: string;
     desc: string; tips: string; features: string[]; active: boolean; score: number;
   }[]; // 7 种类型全览，active 标记用户所属
+  strengths: string[]; // 优势话术
+  suggestions: string[]; // 成长建议
+  closing: string; // 心理学金句
   };
   }
 
@@ -599,7 +602,7 @@ export function generatePersonalReport(
     const typeKey = result.loveTri || lovetriTypeFromResult(result);
     const typeDef = LOVETRI_TYPES[typeKey] || LOVETRI_TYPES.consummate;
     const avg = result.loveTriAvg || { intimacy: 0, passion: 0, commitment: 0 };
-    const triKeys = ['intimacy', 'passion', 'commitment'];
+    const triKeys: Array<'intimacy' | 'passion' | 'commitment'> = ['intimacy', 'passion', 'commitment'];
 
     // 三角三维均分
     const triangle = triKeys.map(d => ({
@@ -696,7 +699,8 @@ function lovetriTypeFromResult(result: ScoreResult): string {
   if (i) return 'liking';
   if (p) return 'infatuated';
   if (c) return 'empty';
-  const sorted = ['intimacy', 'passion', 'commitment'].sort((a, b) => (avg[b] || 0) - (avg[a] || 0));
+  const sorted = (['intimacy', 'passion', 'commitment'] as Array<'intimacy' | 'passion' | 'commitment'>)
+    .sort((a, b) => (avg[b] || 0) - (avg[a] || 0));
   const top = sorted[0] || 'intimacy';
   return top === 'intimacy' ? 'liking' : top === 'passion' ? 'infatuated' : 'empty';
 }
