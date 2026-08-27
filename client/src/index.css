@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* 暖杏色主调 */
+  --color-primary: #BC6E43;
+  --color-primary-hover: #A85B32;
+  --color-primary-light: #F7ECE1;
+  --color-primary-soft: #E2B48D;
+  --color-secondary: #3D405B;
+  --color-secondary-hover: #2D3045;
+  --color-secondary-light: #E8E9F0;
+  /* 嫩芽绿辅助色 */
+  --color-accent: #7FB78E;
+  --color-accent-hover: #639B74;
+  --color-accent-light: #E9F3EC;
+  --color-success: #6BA684;
+  --color-success-hover: #55916F;
+  --color-success-light: #E8F2EB;
+  --color-info: #8FB6E8;
+  --color-info-hover: #6F9AD9;
+  --color-info-light: #EDF3FB;
+  --color-warning: #F4A261;
+  --color-warning-hover: #E08C4A;
+  --color-warning-light: #FDF3EA;
+  --color-danger: #E76F51;
+  --color-danger-hover: #D45A3C;
+  --color-danger-light: #FDEBE7;
+  --color-surface: #FFFFFF;
+  --color-background: #FBF5EA;
+  --color-text-primary: #3D405B;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #A3978A;
+  --color-border: #EFE3D2;
+  --color-sidebar-bg: #FFFFFF;
+  --color-sidebar-text: #3D405B;
+  --color-sidebar-active: #BC6E43;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+  color: var(--color-text-primary);
+  background: var(--color-background);
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.01em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+@layer components {
+  .card {
+    @apply bg-surface rounded-xl border border-border shadow-card;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-hover hover:border-primary/20;
+  }
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2;
+  }
+  .btn-secondary {
+    @apply bg-secondary/10 hover:bg-secondary/15 text-secondary px-4 py-2.5 rounded-lg font-medium transition-all duration-200;
+  }
+  .btn-ghost {
+    @apply hover:bg-background text-text-primary px-4 py-2.5 rounded-lg font-medium transition-all duration-200;
+  }
+  .input {
+    @apply w-full px-4 py-2.5 border border-border rounded-lg bg-surface text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200;
+  }
+  .label {
+    @apply block text-sm font-medium text-text-secondary mb-1.5;
+  }
+}

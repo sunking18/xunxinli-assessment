@@ -1,0 +1,71 @@
+# 寻心理测评平台 - Docker Compose 部署（q.xunxinli.com）
+# 注意：服务器已有其他站点/nginx 占用 80/443，
+# 因此容器端口不直接暴露到宿主机 80/443，
+# 而是由宿主机现有 nginx 反代到 127.0.0.1:8080（前端容器）。
+# 使用: docker compose up -d --build
+version: "3.8"
+
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: xunxinli-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-xunxinli_root_2026}
+      MYSQL_DATABASE: xunxinli
+      MYSQL_USER: xunxinli
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-xunxinli123}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    # 仅映射到宿主机回环地址，供备份/排障使用，不对外
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pxunxinli123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # 后端 API
+  server:
+    build: ./server
+    container_name: xunxinli-server
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://xunxinli:${MYSQL_PASSWORD:-xunxinli123}@mysql:3306/xunxinli
+      JWT_SECRET: ${JWT_SECRET:-xunxinli-assessment-secret-change-me}
+      PORT: 3001
+      CLIENT_URL: ${CLIENT_URL:-https://q.xunxinli.com}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://q.xunxinli.com}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      DEV_SKIP_WECHAT: ${DEV_SKIP_WECHAT:-true}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+    # 仅容器内部网络可达，不对外暴露
+    expose:
+      - "3001"
+
+  # 前端（Nginx）
+  client:
+    build: ./client
+    container_name: xunxinli-client
+    restart: unless-stopped
+    depends_on:
+      - server
+    # 映射到宿主机回环地址 8080，由宿主机 nginx 反代（避免占用 80/443）
+    ports:
+      - "127.0.0.1:8080:80"
+
+volumes:
+  mysql_data:
+

@@ -1,0 +1,115 @@
+// 寻心理测评平台 - 统一表结构
+// 设计理念：所有测评共享一张 assessments 表（题目/维度/报告模板存 JSON），
+// 所有答卷与个性化报告共享一张 responses 表（答案/得分/报告存 JSON）。
+// 新增测评无需建新表，插入一条记录即可；查询答卷按 assessmentId 过滤。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 管理员 / 问卷生成者
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  password     String
+  displayName  String
+  nickname     String?
+  avatar       String?
+  wechatOpenId String?  @unique
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  responses    Response[]
+}
+
+// 统一测评表：一个测评一行，题目/维度/报告模板均为 JSON
+model Assessment {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique
+  name            String
+  nameEn          String?
+  category        String
+  description     String   @db.Text
+  instructions    String?  @db.Text
+  coverColor      String   @default("#6366F1")
+  icon            String?
+  questions       String   @db.Text
+  dimensions      String   @db.Text
+  reportTemplates String   @db.Text
+  status          String   @default("published")
+  sortOrder       Int      @default(0)
+  enablePairMatch Boolean  @default(false) // 是否开启双人匹配邀请（第一阶段 false，第二阶段 true）
+  fillCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  responses       Response[]
+}
+
+// 统一答卷表：一次作答一行，答案/得分/个性化报告均为 JSON
+model Response {
+  id             Int        @id @default(autoincrement())
+  assessmentId   Int
+  userId         Int?
+  assessment     Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  user           User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  answers        String   @db.Text
+  score          String   @db.Text
+  resultType     String
+  totalScore     Float?
+  report         String   @db.Text
+  respondentName   String?
+  wechatInfo       String?  @db.Text
+  respondentInfo   String?  @db.Text
+  duration         Int?
+  ipAddress       String?
+  userAgent       String?
+  // 爱情测评（love）扩展
+  mode           String?    // free=免费版 / deep=深度版 / partner=伴侣版
+  pairCode       String?    // 双人匹配邀请码
+  isPaid         Boolean    @default(false) // 是否已解锁深度报告
+  paidAt         DateTime?
+  // 爱情三角（lovetri）分享与双人配对扩展
+  shareCode         String?    // 分享码（海报/链接分享用）
+  sharedAt          DateTime?  // 首次分享时间
+  partnerResponseId Int?       // 已配对的伴侣答卷 ID
+  partnerName       String?    // 伴侣称呼（配对成功后回填）
+  matchedAt         DateTime?  // 配对完成时间
+  createdAt       DateTime @default(now())
+
+  @@index([assessmentId, createdAt])
+  @@index([userId])
+  @@index([pairCode])
+  @@index([shareCode])
+}
+
+// 订单表：付费解锁深度版
+model Order {
+  id          Int       @id @default(autoincrement())
+  orderNo     String    @unique
+  responseId  Int?
+  amount      Float
+  status      String    @default("pending") // pending=待支付 / paid=已支付 / closed=已关闭
+  channel     String    @default("wechat")  // wechat=微信支付 / unlock=兑换码
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@index([responseId])
+}
+
+// 兑换码表：深度版解锁（支付上线前的过渡方案）
+model UnlockCode {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  amount      Float     @default(9.9)
+  status      String    @default("unused") // unused=未使用 / used=已使用 / revoked=已作废
+  responseId  Int?
+  createdAt   DateTime  @default(now())
+  usedAt      DateTime?
+
+  @@index([responseId])
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="lasGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" />
+      <stop offset="50%" stop-color="#EC4899" />
+      <stop offset="100%" stop-color="#F43F5E" />
+    </linearGradient>
+  </defs>
+  <path d="M32 4 L58 18 V46 L32 60 L6 46 V18 Z" stroke="url(#lasGrad)" stroke-width="4" stroke-linejoin="round" fill="url(#lasGrad)" fill-opacity="0.12" />
+  <path d="M32 16 C27 11 18 14 18 23 C18 29 32 40 32 40 C32 40 46 29 46 23 C46 14 37 11 32 16 Z" fill="url(#lasGrad)" />
+</svg>
