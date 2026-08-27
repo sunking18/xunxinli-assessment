@@ -27,8 +27,10 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     # 仅映射到宿主机回环地址，供备份/排障使用，不对外
+    # 注：若宿主机本机已运行 MySQL 占用 3306，改宿主机侧端口避免冲突，
+    # 容器内部网络仍用 3306（server 链接不受影响）
     ports:
-      - "127.0.0.1:3306:3306"
+      - "127.0.0.1:3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pxunxinli123"]
       interval: 10s
