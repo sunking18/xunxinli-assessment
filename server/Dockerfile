@@ -2,6 +2,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Alpine 下 Prisma 需要 OpenSSL 才能加载查询引擎
+RUN apk add --no-cache openssl
+
 # 安装依赖（含 prisma 生成客户端所需）
 COPY package*.json ./
 RUN npm install
@@ -19,6 +22,9 @@ RUN npx tsc -p tsconfig.json
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+
+# 运行阶段同样需要 OpenSSL 才能使用 Prisma 引擎
+RUN apk add --no-cache openssl
 
 COPY package*.json ./
 RUN npm install --omit=dev
