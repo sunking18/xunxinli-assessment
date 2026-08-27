@@ -44,6 +44,7 @@ interface ReportData {
       secondary: { key: string; cn: string; en: string; color: string; tag: string; score: number; core: string };
       low: { key: string; cn: string; en: string; color: string; score: number; tip: string };
       combo: string;
+      strength: string;
       balance: { title: string; desc: string; near: boolean; diff: number };
       warns: string[];
       dims: { key: string; cn: string; en: string; color: string; tag: string; score: number; max: number; level: string; levelLabel: string; levelDesc: string; percent: number }[];
@@ -52,7 +53,7 @@ interface ReportData {
     // 爱情三角（lovetri）扩展
     loveTri?: any;
   };
-  assessment: { id: number; code: string; name: string; coverColor: string; icon: string };
+  assessment: { id: number; code: string; name: string; coverColor: string; icon: string; enablePairMatch?: boolean };
   createdAt: string;
   // love / lovetri 扩展
   mode?: string;

@@ -34,6 +34,7 @@ interface ReportData {
       tip: string;
     };
     combo: string;
+    strength: string;
     balance: {
       title: string;
       desc: string;
