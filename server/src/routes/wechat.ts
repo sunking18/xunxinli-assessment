@@ -20,6 +20,24 @@ wechatRouter.get('/config', async (req, res) => {
   });
 });
 
+// 发起微信网页授权：跳转到微信 OAuth 授权页
+wechatRouter.get('/authorize', async (req, res) => {
+  const appId = process.env.WECHAT_APP_ID;
+  const secret = process.env.WECHAT_APP_SECRET;
+  if (!appId || !secret) {
+    return res.status(501).json({ message: '微信配置未启用' });
+  }
+
+  const { state } = req.query;
+  const redirectBase = process.env.PUBLIC_BASE_URL || process.env.CLIENT_URL || '';
+  const redirectUri = encodeURIComponent(`${redirectBase}/api/wechat/oauth/callback`);
+  const encodedState = encodeURIComponent((state as string) || '');
+
+  const wxUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${appId}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_userinfo&state=${encodedState}#wechat_redirect`;
+
+  res.redirect(wxUrl);
+});
+
 // 微信 OAuth 回调（线上对接公众号网页授权后换取用户信息）
 wechatRouter.get('/oauth/callback', async (req, res) => {
   const { code } = req.query;

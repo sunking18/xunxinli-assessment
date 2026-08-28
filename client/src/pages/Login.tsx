@@ -15,12 +15,20 @@ export default function Login() {
   const [nickname, setNickname] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [wechatConfig, setWechatConfig] = useState<{ enabled: boolean; skipWechat: boolean; appId: string } | null>(null);
 
   const params = new URLSearchParams(location.search);
   const returnUrl = params.get('returnUrl') || '/';
   const wxOpenid = params.get('wx_openid');
   const wxNickname = params.get('wx_nickname');
   const wxAvatar = params.get('wx_avatar');
+
+  useEffect(() => {
+    api
+      .get('/api/wechat/config')
+      .then((res) => setWechatConfig(res.data.data))
+      .catch(() => setWechatConfig({ enabled: false, skipWechat: true, appId: '' }));
+  }, []);
 
   // 已登录则跳回
   useEffect(() => {
@@ -73,8 +81,15 @@ export default function Login() {
     }
   };
 
-  const handleWechatMock = async () => {
+  const handleWechatLogin = async () => {
     setError('');
+    if (wechatConfig?.enabled) {
+      // 真实微信授权：跳转到后端授权入口，由后端拼接 redirect_uri 并跳转到微信
+      const state = encodeURIComponent(returnUrl.replace('/fill/', ''));
+      window.location.href = `/api/wechat/authorize?state=${state}`;
+      return;
+    }
+    // 本地模拟登录
     if (!nickname.trim()) {
       setError('请输入昵称后再登录');
       return;
@@ -93,13 +108,6 @@ export default function Login() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  // 生产环境微信授权链接
-  const wechatAuthUrl = () => {
-    const redirect = encodeURIComponent(`${window.location.origin}/api/wechat/oauth/callback`);
-    const state = encodeURIComponent(returnUrl.replace('/fill/', ''));
-    return `/api/wechat/authorize?state=${state}`;
   };
 
   return (
@@ -141,28 +149,47 @@ export default function Login() {
 
             {tab === 'wechat' ? (
               <div className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-text-primary">
-                    昵称 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    placeholder="请输入您的昵称"
-                    className="input w-full"
-                  />
-                  <p className="mt-1 text-xs text-text-muted">本地测试：输入昵称后点击下方按钮即可模拟微信登录</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleWechatMock}
-                  disabled={submitting}
-                  className="btn-primary w-full"
-                >
-                  {submitting ? '登录中...' : '微信登录（本地模拟）'}
-                </button>
-                <p className="text-center text-xs text-text-muted">正式上线后，此处将跳转微信扫码授权</p>
+                {wechatConfig?.enabled ? (
+                  <>
+                    <p className="text-center text-sm text-text-muted">
+                      点击下方按钮将跳转至微信授权页面
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleWechatLogin}
+                      disabled={submitting}
+                      className="btn-primary w-full"
+                    >
+                      {submitting ? '跳转中...' : '微信登录'}
+                    </button>
+                    <p className="text-center text-xs text-text-muted">授权后可自动使用微信昵称与头像</p>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">
+                        昵称 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        placeholder="请输入您的昵称"
+                        className="input w-full"
+                      />
+                      <p className="mt-1 text-xs text-text-muted">本地测试：输入昵称后点击下方按钮即可模拟微信登录</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleWechatLogin}
+                      disabled={submitting}
+                      className="btn-primary w-full"
+                    >
+                      {submitting ? '登录中...' : '微信登录（本地模拟）'}
+                    </button>
+                    <p className="text-center text-xs text-text-muted">正式上线后配置微信 AppID 即可跳转授权</p>
+                  </>
+                )}
               </div>
             ) : (
               <form onSubmit={handleAccountSubmit} className="space-y-4">
