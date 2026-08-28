@@ -37,4 +37,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3001
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx prisma db seed && node dist/index.js"]
+# 注意：只建表（db push），不执行 db seed。
+# 业务数据（测评定义、题目、报告模板等）统一由 initdb/*.sql 初始化，
+# 避免 seed.ts 里的硬编码旧数据覆盖 SQL 导入的最新内容。
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/index.js"]

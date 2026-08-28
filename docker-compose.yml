@@ -28,11 +28,18 @@ services:
       - --default-authentication-plugin=mysql_native_password
     volumes:
       - mysql_data:/var/lib/mysql
-    # 仅映射到宿主机回环地址，供备份/排障使用，不对外
-    # 注：若宿主机本机已运行 MySQL 占用 3306，改宿主机侧端口避免冲突，
-    # 容器内部网络仍用 3306（server 链接不受影响）
+      # 首次初始化（数据目录为空时）自动按文件名顺序执行 initdb/*.sql。
+      # 业务数据（测评定义/题目/报告模板/管理员等）全部由 SQL 提供，
+      # 后端不再执行 prisma db seed。修改数据请编辑对应 SQL 或手动导入。
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    # 宿主机侧用 3307（避开本机 MySQL 占用的 3306），容器内部仍为 3306，
+    # server 通过容器网络 mysql:3306 连接，不受此映射影响。
+    # ⚠️ 暴露到公网存在爆破风险，务必：
+    #   1) 使用强密码（.env 的 MYSQL_PASSWORD / MYSQL_ROOT_PASSWORD）
+    #   2) 在云厂商安全组 + 系统防火墙仅放行可信来源 IP
+    #   3) 不需要外网访问时改回 "127.0.0.1:3307:3306"
     ports:
-      - "127.0.0.1:3307:3306"
+      - "0.0.0.0:3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_PASSWORD:-xunxinli123}"]
       interval: 10s
