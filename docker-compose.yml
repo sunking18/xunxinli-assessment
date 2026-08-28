@@ -1,7 +1,9 @@
 # 寻心理测评平台 - Docker Compose 部署（q.xunxinli.com）
 # 注意：
-#  - 服务器已有其他站点/nginx 占用 80/443，
-#    因此前端容器映射到 127.0.0.1:8080，由宿主机现有 nginx 反代。
+#  - 服务器 80/443 由另一套系统的 survey-nginx 容器（/data/MCsurvey-docker）占用，
+#    它是 xunxinli.com / survey.xunxinli.com 的总网关，不能停。
+#  - 因此本前端容器映射到宿主机 0.0.0.0:8080，
+#    由 survey-nginx 容器反代 q.xunxinli.com → 172.17.0.1:8080。
 #  - 数据库使用 compose 自带 MySQL 容器（独立隔离，数据存 volume mysql_data），
 #    与服务器其他项目的 MySQL 互不影响。首次部署执行
 #    docker compose exec server npx prisma db push 建表。
@@ -67,9 +69,11 @@ services:
     restart: unless-stopped
     depends_on:
       - server
-    # 映射到宿主机回环地址 8080，由宿主机 nginx 反代（避免占用 80/443）
+    # 8080 供 survey-nginx 容器反代（该容器是 xunxinli.com / survey.xunxinli.com 的总网关）。
+    # 不能只绑 127.0.0.1，否则 survey-nginx 容器（跨网络）访问不到；
+    # 绑 0.0.0.0 保证连通，建议用防火墙限制 8080 只对本机/内网开放。
     ports:
-      - "127.0.0.1:8080:80"
+      - "0.0.0.0:8080:80"
 
 volumes:
   mysql_data:
