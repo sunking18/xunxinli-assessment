@@ -207,14 +207,21 @@ adminRouter.get('/assessments/:id/qrcode', async (req, res) => {
 });
 
 // ==================== 答卷管理 ====================
-// 全局答卷列表（所有测评，含测评信息）
+// 全局答卷列表（所有测评，含测评信息；支持按状态筛选）
 adminRouter.get('/responses', async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 20, 1), 100);
+  const statusFilter = req.query.status as string | undefined;
+
+  const where: any = {};
+  if (statusFilter && ['active', 'user_deleted', 'admin_deleted'].includes(statusFilter)) {
+    where.status = statusFilter;
+  }
 
   const [total, list] = await Promise.all([
-    prisma.response.count(),
+    prisma.response.count({ where }),
     prisma.response.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -224,6 +231,7 @@ adminRouter.get('/responses', async (req, res) => {
         totalScore: true,
         respondentName: true,
         duration: true,
+        status: true,
         createdAt: true,
         assessment: { select: { id: true, code: true, name: true, coverColor: true } },
       },
@@ -240,7 +248,11 @@ adminRouter.get('/assessments/:id/responses', async (req, res) => {
   const startDate = req.query.startDate ? new Date(String(req.query.startDate)) : undefined;
   const endDate = req.query.endDate ? new Date(String(req.query.endDate)) : undefined;
 
+  const statusFilter = req.query.status as string | undefined;
   const where: any = { assessmentId: id };
+  if (statusFilter && ['active', 'user_deleted', 'admin_deleted'].includes(statusFilter)) {
+    where.status = statusFilter;
+  }
   if (startDate || endDate) {
     where.createdAt = {};
     if (startDate && !isNaN(startDate.getTime())) where.createdAt.gte = startDate;
@@ -264,6 +276,7 @@ adminRouter.get('/assessments/:id/responses', async (req, res) => {
         totalScore: true,
         respondentName: true,
         duration: true,
+        status: true,
         createdAt: true,
         // 分享与配对扩展（love / lovetri）
         mode: true,
@@ -596,11 +609,20 @@ adminRouter.get('/responses/:id', async (req, res) => {
   });
 });
 
+// 管理员删除答卷（软删除，状态改为 admin_deleted）
 adminRouter.delete('/responses/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '答卷 ID 无效' });
-  await prisma.response.delete({ where: { id } });
+  await prisma.response.update({ where: { id }, data: { status: 'admin_deleted' } });
   res.json({ message: '答卷已删除' });
+});
+
+// 管理员恢复答卷（状态改回 active）
+adminRouter.patch('/responses/:id/restore', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '答卷 ID 无效' });
+  await prisma.response.update({ where: { id }, data: { status: 'active' } });
+  res.json({ message: '答卷已恢复' });
 });
 
 // 导出答卷数据（CSV / JSON）

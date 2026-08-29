@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, getErrorMessage } from '../../api/client';
-import { IconChevronLeft, IconDownload, IconEye, IconTrash } from '../../components/Icons';
+import { IconChevronLeft, IconDownload, IconEye, IconRefresh, IconTrash } from '../../components/Icons';
 
 interface ResponseItem {
   id: number;
@@ -9,8 +9,18 @@ interface ResponseItem {
   totalScore: number;
   respondentName: string | null;
   duration: number | null;
+  status: string;
   createdAt: string;
 }
+
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'active': return { text: '正常', className: 'bg-green-100 text-green-700' };
+    case 'user_deleted': return { text: '用户删除', className: 'bg-orange-100 text-orange-700' };
+    case 'admin_deleted': return { text: '管理员删除', className: 'bg-red-100 text-red-700' };
+    default: return { text: status, className: 'bg-gray-100 text-gray-700' };
+  }
+};
 
 export default function AdminResponses() {
   const { id } = useParams<{ id: string }>();
@@ -41,9 +51,19 @@ export default function AdminResponses() {
   }, [id, load]);
 
   const handleDelete = async (rid: number) => {
-    if (!confirm('确定删除这份答卷吗？此操作不可恢复。')) return;
+    if (!confirm('确定删除这份答卷吗？可在后台恢复。')) return;
     try {
       await api.delete(`/admin/responses/${rid}`);
+      load();
+    } catch (err) {
+      alert(getErrorMessage(err));
+    }
+  };
+
+  const handleRestore = async (rid: number) => {
+    if (!confirm('确定恢复这份答卷吗？')) return;
+    try {
+      await api.patch(`/admin/responses/${rid}/restore`);
       load();
     } catch (err) {
       alert(getErrorMessage(err));
@@ -100,6 +120,7 @@ export default function AdminResponses() {
                   <th className="px-4 py-3 font-medium">结果类型</th>
                   <th className="px-4 py-3 font-medium">总分</th>
                   <th className="px-4 py-3 font-medium">耗时</th>
+                  <th className="px-4 py-3 font-medium">状态</th>
                   <th className="px-4 py-3 text-right font-medium">操作</th>
                 </tr>
               </thead>
@@ -115,15 +136,28 @@ export default function AdminResponses() {
                     <td className="px-4 py-3 text-text-secondary">{r.totalScore ?? '-'}</td>
                     <td className="px-4 py-3 text-text-muted">{r.duration ? `${r.duration}s` : '-'}</td>
                     <td className="px-4 py-3">
+                      {(() => {
+                        const badge = statusBadge(r.status);
+                        return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${badge.className}`}>{badge.text}</span>;
+                      })()}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1.5">
                         <Link to={`/admin/responses/${r.id}`} title="查看详情与报告"
                           className="rounded-lg p-2 text-text-muted hover:bg-primary-light hover:text-primary">
                           <IconEye size={16} />
                         </Link>
-                        <button title="删除" onClick={() => handleDelete(r.id)}
-                          className="rounded-lg p-2 text-text-muted hover:bg-danger/10 hover:text-danger">
-                          <IconTrash size={16} />
-                        </button>
+                        {r.status === 'active' ? (
+                          <button title="删除" onClick={() => handleDelete(r.id)}
+                            className="rounded-lg p-2 text-text-muted hover:bg-danger/10 hover:text-danger">
+                            <IconTrash size={16} />
+                          </button>
+                        ) : (
+                          <button title="恢复" onClick={() => handleRestore(r.id)}
+                            className="rounded-lg p-2 text-text-muted hover:bg-green-100 hover:text-green-700">
+                            <IconRefresh size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

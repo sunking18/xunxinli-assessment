@@ -20,6 +20,10 @@ model User {
   displayName  String
   nickname     String?
   avatar       String?
+  email        String?  // 邮箱（注册补充）
+  phone        String?  // 电话（注册补充）
+  gender       String?  // 性别（注册补充）
+  birthday     String?  // 生日（注册补充）
   wechatOpenId String?  @unique
   role         String   @default("admin")
   createdAt    DateTime @default(now())
@@ -79,12 +83,14 @@ model Response {
   partnerResponseId Int?       // 已配对的伴侣答卷 ID
   partnerName       String?    // 伴侣称呼（配对成功后回填）
   matchedAt         DateTime?  // 配对完成时间
+  status          String     @default("active") // active | user_deleted | admin_deleted
   createdAt       DateTime @default(now())
 
   @@index([assessmentId, createdAt])
   @@index([userId])
   @@index([pairCode])
   @@index([shareCode])
+  @@index([status])
 }
 
 // 订单表：付费解锁深度版

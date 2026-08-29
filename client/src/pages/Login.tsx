@@ -13,6 +13,10 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [registering, setRegistering] = useState(false);
   const [nickname, setNickname] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState('');
+  const [birthday, setBirthday] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [wechatConfig, setWechatConfig] = useState<{ enabled: boolean; skipWechat: boolean; appId: string } | null>(null);
@@ -64,16 +68,20 @@ export default function Login() {
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (registering) {
+      if (!nickname.trim()) return setError('请输入昵称');
+      if (!email.trim()) return setError('请输入邮箱');
+      if (!phone.trim()) return setError('请输入电话');
+    }
     setSubmitting(true);
     try {
       const { user: u } = registering
-        ? await api.post('/auth/register', { username, password, nickname }).then((r) => r.data.data)
+        ? await api
+            .post('/auth/register', { username, password, nickname, email, phone, gender, birthday })
+            .then((r) => r.data.data)
         : await login(username, password);
-      if (!u.nickname) {
-        navigate(`/set-nickname?returnUrl=${encodeURIComponent(returnUrl)}`, { replace: true });
-      } else {
-        navigate(returnUrl, { replace: true });
-      }
+      // 账号注册/登录成功后直接返回目标页，不再跳转设置昵称页
+      navigate(returnUrl, { replace: true });
     } catch (err: any) {
       setError(getErrorMessage(err));
     } finally {
@@ -214,16 +222,69 @@ export default function Login() {
                   />
                 </div>
                 {registering && (
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-text-primary">昵称</label>
-                    <input
-                      type="text"
-                      value={nickname}
-                      onChange={(e) => setNickname(e.target.value)}
-                      placeholder="用于报告中的称呼"
-                      className="input w-full"
-                    />
-                  </div>
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">
+                        昵称 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={nickname}
+                        onChange={(e) => setNickname(e.target.value)}
+                        placeholder="用于报告中的称呼"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">
+                        邮箱 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="example@email.com"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">
+                        电话 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="13800138000"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">性别</label>
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className="input w-full"
+                      >
+                        <option value="">请选择</option>
+                        <option value="male">男</option>
+                        <option value="female">女</option>
+                        <option value="other">其他</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">生日</label>
+                      <input
+                        type="date"
+                        value={birthday}
+                        onChange={(e) => setBirthday(e.target.value)}
+                        className="input w-full"
+                      />
+                    </div>
+                  </>
                 )}
                 <button type="submit" disabled={submitting} className="btn-primary w-full">
                   {submitting ? '处理中...' : registering ? '注册并登录' : '登录'}

@@ -260,10 +260,10 @@ publicRouter.post('/love/pair', authenticate, async (req: AuthRequest, res) => {
   const { responseId } = req.body;
   if (!responseId) return res.status(400).json({ message: '缺少 responseId' });
   const response = await prisma.response.findUnique({
-    where: { id: Number(responseId) },
+    where: { id: Number(responseId), status: 'active' },
     include: { assessment: { select: { code: true, enablePairMatch: true } } },
   });
-  if (!response) return res.status(404).json({ message: '答卷不存在' });
+  if (!response) return res.status(404).json({ message: '答卷不存在或已被删除' });
   const pairCode = response.pairCode || genPairCode();
   await prisma.response.update({ where: { id: response.id }, data: { pairCode } });
   const code = response.assessment.code;
@@ -277,8 +277,8 @@ publicRouter.post('/love/pair', authenticate, async (req: AuthRequest, res) => {
 publicRouter.post('/lovetri/share', authenticate, async (req: AuthRequest, res) => {
   const { responseId } = req.body;
   if (!responseId) return res.status(400).json({ message: '缺少 responseId' });
-  const response = await prisma.response.findUnique({ where: { id: Number(responseId) } });
-  if (!response) return res.status(404).json({ message: '答卷不存在' });
+  const response = await prisma.response.findUnique({ where: { id: Number(responseId), status: 'active' } });
+  if (!response) return res.status(404).json({ message: '答卷不存在或已被删除' });
   let shareCode = response.shareCode;
   let sharedAt = response.sharedAt;
   if (!shareCode) {
@@ -295,7 +295,7 @@ publicRouter.post('/lovetri/share', authenticate, async (req: AuthRequest, res) 
 publicRouter.get('/love/match/:pairCode', async (req, res) => {
   const pairCode = String(req.params.pairCode || '').toUpperCase();
   const responses = await prisma.response.findMany({
-    where: { pairCode },
+    where: { pairCode, status: 'active' },
     orderBy: { createdAt: 'asc' },
     include: { assessment: { select: { id: true, code: true, name: true, coverColor: true, enablePairMatch: true } } },
   });
@@ -389,8 +389,8 @@ publicRouter.get('/love/match/:pairCode', async (req, res) => {
 publicRouter.post('/love/unlock', async (req, res) => {
   const { responseId, code } = req.body;
   if (!responseId) return res.status(400).json({ message: '缺少 responseId' });
-  const response = await prisma.response.findUnique({ where: { id: Number(responseId) } });
-  if (!response) return res.status(404).json({ message: '答卷不存在' });
+  const response = await prisma.response.findUnique({ where: { id: Number(responseId), status: 'active' } });
+  if (!response) return res.status(404).json({ message: '答卷不存在或已被删除' });
   if (response.isPaid) return res.json({ message: '已解锁', data: { isPaid: true } });
 
   // 兑换码解锁
@@ -419,10 +419,10 @@ publicRouter.post('/love/unlock', async (req, res) => {
 publicRouter.get('/responses/:id/report', async (req, res) => {
   const id = Number(req.params.id);
   const response = await prisma.response.findUnique({
-    where: { id },
+    where: { id, status: 'active' },
     include: { assessment: { select: { id: true, code: true, name: true, coverColor: true, icon: true, enablePairMatch: true } } },
   });
-  if (!response) return res.status(404).json({ message: '报告不存在' });
+  if (!response) return res.status(404).json({ message: '报告不存在或已被删除' });
   res.json({
     data: {
       responseId: response.id,
@@ -453,7 +453,7 @@ publicRouter.post('/my/responses', async (req, res) => {
   }
   const uniqueIds = Array.from(new Set(ids.slice(0, 50).map(Number)));
   const responses = await prisma.response.findMany({
-    where: { id: { in: uniqueIds } },
+    where: { id: { in: uniqueIds }, status: 'active' },
     include: {
       assessment: { select: { id: true, code: true, name: true, coverColor: true } },
     },
@@ -493,7 +493,7 @@ publicRouter.get('/my/reports', authenticate, async (req: AuthRequest, res) => {
     return res.status(401).json({ message: '请先登录' });
   }
   const responses = await prisma.response.findMany({
-    where: { userId },
+    where: { userId, status: 'active' },
     include: {
       assessment: { select: { id: true, code: true, name: true, coverColor: true } },
     },
@@ -537,18 +537,27 @@ publicRouter.get('/my/reports', authenticate, async (req: AuthRequest, res) => {
   res.json({ data: { reports, doneCodes } });
 });
 
-// 用户删除自己的答卷记录（仅允许删除归属当前用户的答卷）
-publicRouter.delete('/my/responses/:id', authenticate, async (req: AuthRequest, res) => {
+// 用户删除自己的答卷记录（软删除，状态改为 user_deleted）
+publicRouter.patch('/my/responses/:id', authenticate, async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   const userId = (req.user as any)?.userId;
+  const { status } = req.body;
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '答卷 ID 无效' });
   if (!userId) return res.status(401).json({ message: '请先登录' });
 
   const existing = await prisma.response.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: '答卷不存在' });
   if (existing.userId !== userId) {
-    return res.status(403).json({ message: '无权删除他人的答卷' });
+    return res.status(403).json({ message: '无权操作他人的答卷' });
   }
-  await prisma.response.delete({ where: { id } });
-  res.json({ message: '答卷已删除' });
+
+  if (status === 'user_deleted') {
+    await prisma.response.update({ where: { id }, data: { status: 'user_deleted' } });
+    return res.json({ message: '答卷已删除' });
+  }
+  if (status === 'active') {
+    await prisma.response.update({ where: { id }, data: { status: 'active' } });
+    return res.json({ message: '答卷已恢复' });
+  }
+  return res.status(400).json({ message: '不支持的状态操作' });
 });

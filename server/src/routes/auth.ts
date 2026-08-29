@@ -76,7 +76,7 @@ authRouter.post('/login', async (req, res) => {
 // 注册（仅用于本地开发/测试，生产环境建议关闭或加验证）
 authRouter.post('/register', async (req, res) => {
   try {
-    const { username, password, nickname } = req.body;
+    const { username, password, nickname, email, phone, gender, birthday } = req.body;
     if (!username || !password) {
       return res.status(400).json({ message: '请输入账号和密码' });
     }
@@ -96,6 +96,10 @@ authRouter.post('/register', async (req, res) => {
         password: hashed,
         displayName: nickname || username,
         nickname: nickname || null,
+        email: email || null,
+        phone: phone || null,
+        gender: gender || null,
+        birthday: birthday || null,
         role: 'user',
       },
     });

@@ -33,9 +33,9 @@ export default function UserReports() {
   }, []);
 
   const remove = async (responseId: number) => {
-    if (!confirm('确定删除这条报告记录？删除后不可恢复。')) return;
+    if (!confirm('确定删除这条报告记录？删除后可在后台恢复。')) return;
     try {
-      await api.delete(`/my/responses/${responseId}`);
+      await api.patch(`/my/responses/${responseId}`, { status: 'user_deleted' });
       setReports(prev => prev.filter(r => r.responseId !== responseId));
     } catch (err) {
       setError(getErrorMessage(err, '删除失败'));
@@ -43,10 +43,10 @@ export default function UserReports() {
   };
 
   const clearAll = () => {
-    if (!confirm('当前登录账号的所有报告将全部删除，此操作不可恢复。')) return;
+    if (!confirm('当前登录账号的所有报告将全部删除，此操作可在后台恢复。')) return;
     setError('');
     const ids = reports.map(r => r.responseId);
-    Promise.allSettled(ids.map(id => api.delete(`/my/responses/${id}`)))
+    Promise.allSettled(ids.map(id => api.patch(`/my/responses/${id}`, { status: 'user_deleted' })))
       .then(() => setReports([]));
   };
 
