@@ -84,6 +84,7 @@ export default function LoveTriPoster() {
   const [pairLink, setPairLink] = useState('');
   const [pairing, setPairing] = useState(false);
   const [copiedPair, setCopiedPair] = useState(false);
+  const [enablePairMatch, setEnablePairMatch] = useState(false);
 
   // 生成「邀请 TA 一起测」配对链接
   const genPairLink = async () => {
@@ -109,7 +110,10 @@ export default function LoveTriPoster() {
 
   useEffect(() => {
     api.get(`/responses/${responseId}/report`)
-      .then(res => setTri(res.data.data.report.loveTri))
+      .then(res => {
+        setTri(res.data.data.report.loveTri);
+        setEnablePairMatch(res.data.data.assessment?.enablePairMatch ?? false);
+      })
       .catch(err => setError(getErrorMessage(err, '海报加载失败')))
       .finally(() => setLoading(false));
   }, [responseId]);
@@ -204,20 +208,24 @@ export default function LoveTriPoster() {
           <span>‹</span> 返回报告
         </Link>
         <div className="flex items-center gap-3">
-          <button
-            onClick={genPairLink}
-            disabled={busy || pairing}
-            className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:brightness-110 disabled:opacity-60"
-          >
-            {pairing ? '生成中…' : '邀请 TA 一起测 💌'}
-          </button>
-          <button
-            onClick={handleShareToWechat}
-            disabled={busy}
-            className="rounded-full bg-[#07c160] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-green-500/30 transition hover:brightness-110 disabled:opacity-60"
-          >
-            {busy ? '生成中…' : '分享给微信好友'}
-          </button>
+          {enablePairMatch && (
+            <>
+              <button
+                onClick={genPairLink}
+                disabled={busy || pairing}
+                className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:brightness-110 disabled:opacity-60"
+              >
+                {pairing ? '生成中…' : '邀请 TA 一起测 💌'}
+              </button>
+              <button
+                onClick={handleShareToWechat}
+                disabled={busy}
+                className="rounded-full bg-[#07c160] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-green-500/30 transition hover:brightness-110 disabled:opacity-60"
+              >
+                {busy ? '生成中…' : '分享给微信好友'}
+              </button>
+            </>
+          )}
           <button
             onClick={handleDownload}
             disabled={busy}
