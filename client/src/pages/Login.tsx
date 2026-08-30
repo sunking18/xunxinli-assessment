@@ -197,7 +197,7 @@ export default function Login() {
                       {submitting ? '跳转中...' : '微信登录'}
                     </button>
                     <p className="text-center text-sm text-text-muted">
-                      点击下方按钮将跳转至微信授权页面
+                      点击按钮将跳转至微信授权页面
                     </p>
 
                     {wechatConfig.webLoginEnabled && (
