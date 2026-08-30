@@ -479,6 +479,12 @@ authRouter.post('/admin/login', async (req, res) => {
       if (admin.status !== 'active') {
         return res.status(403).json({ message: '该管理员账号已停用' });
       }
+      // 超级管理员只能由服务端环境变量配置：改名后旧的 super 记录失效，避免遗留后门
+      if (admin.role === 'super') {
+        return res.status(403).json({
+          message: '该超级管理员账号已失效，请使用服务端配置的管理员账号登录',
+        });
+      }
       if (admin.password !== md5(password)) {
         await logAdminAction({
           admin: { adminId: admin.id, username: admin.username },
