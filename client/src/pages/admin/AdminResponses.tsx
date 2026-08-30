@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, getErrorMessage } from '../../api/client';
-import { IconChevronLeft, IconDownload, IconEye, IconRefresh, IconTrash } from '../../components/Icons';
+import { IconChevronLeft, IconDownload, IconEye, IconTrash } from '../../components/Icons';
 
 interface ResponseItem {
   id: number;
@@ -16,8 +16,6 @@ interface ResponseItem {
 const statusBadge = (status: string) => {
   switch (status) {
     case 'active': return { text: '正常', className: 'bg-green-100 text-green-700' };
-    case 'user_deleted': return { text: '用户删除', className: 'bg-orange-100 text-orange-700' };
-    case 'admin_deleted': return { text: '管理员删除', className: 'bg-red-100 text-red-700' };
     default: return { text: status, className: 'bg-gray-100 text-gray-700' };
   }
 };
@@ -51,19 +49,9 @@ export default function AdminResponses() {
   }, [id, load]);
 
   const handleDelete = async (rid: number) => {
-    if (!confirm('确定删除这份答卷吗？可在后台恢复。')) return;
+    if (!confirm('确定删除这份答卷吗？删除后不可恢复。')) return;
     try {
       await api.delete(`/admin/responses/${rid}`);
-      load();
-    } catch (err) {
-      alert(getErrorMessage(err));
-    }
-  };
-
-  const handleRestore = async (rid: number) => {
-    if (!confirm('确定恢复这份答卷吗？')) return;
-    try {
-      await api.patch(`/admin/responses/${rid}/restore`);
       load();
     } catch (err) {
       alert(getErrorMessage(err));
@@ -147,17 +135,10 @@ export default function AdminResponses() {
                           className="rounded-lg p-2 text-text-muted hover:bg-primary-light hover:text-primary">
                           <IconEye size={16} />
                         </Link>
-                        {r.status === 'active' ? (
-                          <button title="删除" onClick={() => handleDelete(r.id)}
-                            className="rounded-lg p-2 text-text-muted hover:bg-danger/10 hover:text-danger">
-                            <IconTrash size={16} />
-                          </button>
-                        ) : (
-                          <button title="恢复" onClick={() => handleRestore(r.id)}
-                            className="rounded-lg p-2 text-text-muted hover:bg-green-100 hover:text-green-700">
-                            <IconRefresh size={16} />
-                          </button>
-                        )}
+                        <button title="删除" onClick={() => handleDelete(r.id)}
+                          className="rounded-lg p-2 text-text-muted hover:bg-danger/10 hover:text-danger">
+                          <IconTrash size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>

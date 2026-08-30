@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { QRCodeCanvas } from 'qrcode.react';
 import { api, getErrorMessage } from '../../api/client';
@@ -76,6 +76,9 @@ interface LoveTriData {
 
 export default function LoveTriPoster() {
   const { responseId } = useParams<{ responseId: string }>();
+  const [searchParams] = useSearchParams();
+  const autoShare = searchParams.get('share') === '1';
+  const autoSharedRef = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
   const [tri, setTri] = useState<LoveTriData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -174,6 +177,18 @@ export default function LoveTriPoster() {
       setBusy(false);
     }
   };
+
+  // 从报告页「转发给微信好友」进入时，自动尝试拉起系统分享
+  useEffect(() => {
+    if (!autoShare || !tri || autoSharedRef.current || loading) return;
+    autoSharedRef.current = true;
+    const timer = setTimeout(() => {
+      handleShareToWechat().catch(() => {
+        // 自动分享可能被浏览器拦截（非用户手势），页面仍保留手动分享按钮
+      });
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [autoShare, tri, loading]);
 
   if (loading) {
     return (

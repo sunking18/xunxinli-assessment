@@ -270,12 +270,20 @@ export default function LoveTriReport({ data, assessmentCode, share, enablePairM
       <section className="mt-6 rounded-3xl bg-gradient-to-r from-rose-500 via-pink-500 to-violet-500 p-6 text-white shadow-lg shadow-rose-200/60">
         <p className="text-sm font-medium opacity-90">分享我的爱情三角</p>
         <p className="mt-2 text-lg font-bold">{tri.cn} · {tri.tag}</p>
-        <button
-          onClick={() => responseId && navigate(`/report/${responseId}/poster`)}
-          className="mt-4 w-full rounded-xl bg-white px-4 py-3 text-sm font-semibold text-rose-600 shadow transition hover:bg-rose-50"
-        >
-          生成专属分享海报 ✨
-        </button>
+        <div className="mt-4 space-y-3">
+          <button
+            onClick={() => responseId && navigate(`/report/${responseId}/poster`)}
+            className="w-full rounded-xl bg-white px-4 py-3 text-sm font-semibold text-rose-600 shadow transition hover:bg-rose-50"
+          >
+            生成专属分享海报 ✨
+          </button>
+          <button
+            onClick={() => responseId && navigate(`/report/${responseId}/poster?share=1`)}
+            className="w-full rounded-xl border border-white/40 bg-white/10 px-4 py-3 text-sm font-semibold text-white shadow backdrop-blur transition hover:bg-white/20"
+          >
+            转发给微信好友 💬
+          </button>
+        </div>
       </section>
 
       {/* ===== 邀请 TA 一起测（双人三角匹配） ===== */}

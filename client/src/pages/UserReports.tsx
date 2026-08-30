@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../api/client';
-import { getAssessmentIcon, IconHistory, IconTrash, IconSparkles } from '../components/Icons';
+import { getAssessmentIcon, IconHistory, IconSparkles } from '../components/Icons';
 
 interface MyReport {
   responseId: number;
@@ -32,24 +32,6 @@ export default function UserReports() {
       .finally(() => setLoading(false));
   }, []);
 
-  const remove = async (responseId: number) => {
-    if (!confirm('确定删除这条报告记录？删除后可在后台恢复。')) return;
-    try {
-      await api.patch(`/my/responses/${responseId}`, { status: 'user_deleted' });
-      setReports(prev => prev.filter(r => r.responseId !== responseId));
-    } catch (err) {
-      setError(getErrorMessage(err, '删除失败'));
-    }
-  };
-
-  const clearAll = () => {
-    if (!confirm('当前登录账号的所有报告将全部删除，此操作可在后台恢复。')) return;
-    setError('');
-    const ids = reports.map(r => r.responseId);
-    Promise.allSettled(ids.map(id => api.patch(`/my/responses/${id}`, { status: 'user_deleted' })))
-      .then(() => setReports([]));
-  };
-
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-center justify-between">
@@ -60,14 +42,6 @@ export default function UserReports() {
           </h1>
           <p className="mt-1 text-sm text-text-muted">查看你填写过的测评与生成报告</p>
         </div>
-        {reports.length > 0 && (
-          <button
-            onClick={clearAll}
-            className="rounded-lg px-3 py-2 text-xs font-medium text-danger hover:bg-danger/10"
-          >
-            清空记录
-          </button>
-        )}
       </div>
 
       {loading ? (
@@ -115,20 +89,13 @@ export default function UserReports() {
                   <span>{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 sm:flex-col sm:items-stretch">
+              <div className="flex items-center gap-2">
                 <Link
                   to={`/report/${r.responseId}`}
                   className="btn-primary px-4 py-2 text-sm text-center"
                 >
                   查看报告
                 </Link>
-                <button
-                  onClick={() => remove(r.responseId)}
-                  className="flex items-center justify-center gap-1 rounded-lg px-3 py-2 text-xs font-medium text-text-muted transition hover:bg-danger/10 hover:text-danger"
-                >
-                  <IconTrash size={14} />
-                  删除
-                </button>
               </div>
             </div>
           ))}

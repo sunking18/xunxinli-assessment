@@ -664,20 +664,12 @@ adminRouter.get('/responses/:id', async (req, res) => {
   });
 });
 
-// 管理员删除答卷（软删除，状态改为 admin_deleted）
+// 管理员删除答卷（物理删除，不可恢复）
 adminRouter.delete('/responses/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '答卷 ID 无效' });
-  await prisma.response.update({ where: { id }, data: { status: 'admin_deleted' } });
+  await prisma.response.delete({ where: { id } });
   res.json({ message: '答卷已删除' });
-});
-
-// 管理员恢复答卷（状态改回 active）
-adminRouter.patch('/responses/:id/restore', async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '答卷 ID 无效' });
-  await prisma.response.update({ where: { id }, data: { status: 'active' } });
-  res.json({ message: '答卷已恢复' });
 });
 
 // 导出答卷数据（CSV / JSON）

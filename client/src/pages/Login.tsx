@@ -159,9 +159,6 @@ export default function Login() {
               <div className="space-y-4">
                 {wechatConfig?.enabled ? (
                   <>
-                    <p className="text-center text-sm text-text-muted">
-                      点击下方按钮将跳转至微信授权页面
-                    </p>
                     <button
                       type="button"
                       onClick={handleWechatLogin}
@@ -170,7 +167,9 @@ export default function Login() {
                     >
                       {submitting ? '跳转中...' : '微信登录'}
                     </button>
-                    <p className="text-center text-xs text-text-muted">授权后可自动使用微信昵称与头像</p>
+                    <p className="text-center text-sm text-text-muted">
+                      点击下方按钮将跳转至微信授权页面
+                    </p>
                   </>
                 ) : (
                   <>
