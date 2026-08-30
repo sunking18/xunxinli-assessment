@@ -9,9 +9,10 @@ export default function Login() {
   const { user, loading, login, wechatLogin, setToken } = useAuth();
 
   const [tab, setTab] = useState<'wechat' | 'account'>('wechat');
-  const [username, setUsername] = useState('');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
-  const [registering, setRegistering] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -65,22 +66,37 @@ export default function Login() {
     };
   }, [wxOpenid, wxNickname, wxAvatar, returnUrl, navigate, wechatLogin]);
 
+  const validateNickname = (value: string) => {
+    if (!value.trim()) return '请输入昵称';
+    if (value.length < 2 || value.length > 20) return '昵称长度需在 2-20 位之间';
+    if (!/[\u4e00-\u9fa5a-zA-Z0-9_]{2,20}/.test(value)) {
+      return '昵称仅支持中文、英文、数字和下划线';
+    }
+    return '';
+  };
+
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (registering) {
-      if (!nickname.trim()) return setError('请输入昵称');
-      if (!email.trim()) return setError('请输入邮箱');
-      if (!phone.trim()) return setError('请输入电话');
+
+    if (mode === 'register') {
+      const nicknameErr = validateNickname(nickname);
+      if (nicknameErr) return setError(nicknameErr);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError('请输入有效的邮箱地址');
+      if (!/^1[3-9]\d{9}$/.test(phone)) return setError('请输入有效的 11 位手机号');
+      if (password.length < 6 || password.length > 32) return setError('密码长度需在 6-32 位之间');
+      if (password !== confirmPassword) return setError('两次输入的密码不一致');
+    } else {
+      if (!account.trim()) return setError('请输入邮箱或手机号');
+      if (!password) return setError('请输入密码');
     }
+
     setSubmitting(true);
     try {
-      const { user: u } = registering
-        ? await api
-            .post('/auth/register', { username, password, nickname, email, phone, gender, birthday })
-            .then((r) => r.data.data)
-        : await login(username, password);
-      // 账号注册/登录成功后直接返回目标页，不再跳转设置昵称页
+      const { user: u } = mode === 'register'
+        ? await register({ nickname, email, phone, password, confirmPassword, gender, birthday })
+        : await login(account, password);
+      // 账号注册/登录成功后直接返回目标页
       navigate(returnUrl, { replace: true });
     } catch (err: any) {
       setError(getErrorMessage(err));
@@ -200,27 +216,47 @@ export default function Login() {
               </div>
             ) : (
               <form onSubmit={handleAccountSubmit} className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-text-primary">账号</label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="input w-full"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-text-primary">密码</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input w-full"
-                    required
-                  />
-                </div>
-                {registering && (
+                {mode === 'login' ? (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">邮箱 / 手机号</label>
+                      <input
+                        type="text"
+                        value={account}
+                        onChange={(e) => setAccount(e.target.value)}
+                        placeholder="请输入邮箱或手机号"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">密码</label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="请输入密码"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <button type="submit" disabled={submitting} className="btn-primary w-full">
+                      {submitting ? '登录中...' : '登录'}
+                    </button>
+                    <div className="flex justify-center gap-4 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode('register');
+                          setError('');
+                        }}
+                        className="text-primary hover:underline"
+                      >
+                        没有账号？去注册
+                      </button>
+                    </div>
+                  </>
+                ) : (
                   <>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-text-primary">
@@ -230,7 +266,7 @@ export default function Login() {
                         type="text"
                         value={nickname}
                         onChange={(e) => setNickname(e.target.value)}
-                        placeholder="用于报告中的称呼"
+                        placeholder="2-20 位，支持中文、英文、数字和下划线"
                         className="input w-full"
                         required
                       />
@@ -250,7 +286,7 @@ export default function Login() {
                     </div>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-text-primary">
-                        电话 <span className="text-red-500">*</span>
+                        手机号 <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="tel"
@@ -283,20 +319,49 @@ export default function Login() {
                         className="input w-full"
                       />
                     </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">
+                        密码 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="6-32 位密码"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-text-primary">
+                        确认密码 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="再次输入密码"
+                        className="input w-full"
+                        required
+                      />
+                    </div>
+                    <button type="submit" disabled={submitting} className="btn-primary w-full">
+                      {submitting ? '注册中...' : '注册并登录'}
+                    </button>
+                    <div className="flex justify-center text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode('login');
+                          setError('');
+                        }}
+                        className="text-primary hover:underline"
+                      >
+                        已有账号？去登录
+                      </button>
+                    </div>
                   </>
                 )}
-                <button type="submit" disabled={submitting} className="btn-primary w-full">
-                  {submitting ? '处理中...' : registering ? '注册并登录' : '登录'}
-                </button>
-                <div className="flex justify-center text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setRegistering((v) => !v)}
-                    className="text-primary hover:underline"
-                  >
-                    {registering ? '已有账号？去登录' : '没有账号？去注册'}
-                  </button>
-                </div>
               </form>
             )}
           </div>

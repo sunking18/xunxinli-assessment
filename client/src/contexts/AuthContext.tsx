@@ -10,11 +10,21 @@ export interface User {
   displayName?: string | null;
 }
 
+interface RegisterData {
+  nickname: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+  gender?: string;
+  birthday?: string;
+}
+
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<{ token: string; user: User }>;
-  register: (username: string, password: string, nickname?: string) => Promise<{ token: string; user: User }>;
+  login: (account: string, password: string) => Promise<{ token: string; user: User }>;
+  register: (data: RegisterData) => Promise<{ token: string; user: User }>;
   wechatLogin: (openid: string, nickname?: string, avatar?: string) => Promise<{ token: string; user: User }>;
   updateNickname: (nickname: string) => Promise<{ token: string; user: User }>;
   logout: () => void;
@@ -60,15 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const res = await api.post('/auth/login', { username, password });
+  const login = async (account: string, password: string) => {
+    const res = await api.post('/auth/login', { account, password });
     const { token, user: userData } = res.data.data;
     applyLogin(token, userData);
     return { token, user: userData };
   };
 
-  const register = async (username: string, password: string, nickname?: string) => {
-    const res = await api.post('/auth/register', { username, password, nickname });
+  const register = async (data: RegisterData) => {
+    const res = await api.post('/auth/register', data);
     const { token, user: userData } = res.data.data;
     applyLogin(token, userData);
     return { token, user: userData };

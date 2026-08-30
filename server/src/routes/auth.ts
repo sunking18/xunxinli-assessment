@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
@@ -8,6 +9,10 @@ const authRouter = Router();
 const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key';
+
+function md5(text: string): string {
+  return crypto.createHash('md5').update(text).digest('hex');
+}
 
 function signToken(payload: {
   userId: number;
@@ -35,22 +40,46 @@ function userToPayload(user: {
   };
 }
 
-// 账号密码登录（管理员/备用）
+// 账号密码登录：支持邮箱或手机号 + md5 密码
 authRouter.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ message: '请输入账号和密码' });
+    const { account, password } = req.body;
+    if (!account || !password) {
+      return res.status(400).json({ message: '请输入邮箱/手机号和密码' });
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(account);
+    const isPhone = /^1[3-9]\d{9}$/.test(account);
+
+    let user = null;
+    if (isEmail) {
+      user = await prisma.user.findFirst({ where: { email: account } });
+    } else if (isPhone) {
+      user = await prisma.user.findFirst({ where: { phone: account } });
+    } else {
+      // 兼容管理员使用 username 登录
+      user = await prisma.user.findFirst({ where: { username: account } });
+    }
+    if (!user && !isEmail && !isPhone) {
+      return res.status(400).json({ message: '请输入有效的邮箱或手机号' });
+    }
     if (!user) {
       return res.status(401).json({ message: '账号或密码错误' });
     }
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      return res.status(401).json({ message: '账号或密码错误' });
+    if (md5(password) !== user.password) {
+      // 兼容旧 bcrypt 密码（老用户/admin 初始账号）
+      const isBcryptHash = /^\$2[aby]\$/.test(user.password);
+      const validBcrypt = isBcryptHash && await bcrypt.compare(password, user.password);
+      if (!validBcrypt) {
+        return res.status(401).json({ message: '账号或密码错误' });
+      }
+      // 旧密码验证通过，自动迁移为 md5（下次登录走新逻辑）
+      try {
+        await prisma.user.update({ where: { id: user.id }, data: { password: md5(password) } });
+      } catch (migrateErr) {
+        console.error('密码迁移失败', migrateErr);
+      }
     }
 
     const token = signToken(userToPayload(user));
@@ -73,31 +102,60 @@ authRouter.post('/login', async (req, res) => {
   }
 });
 
-// 注册（仅用于本地开发/测试，生产环境建议关闭或加验证）
+// 用户注册：昵称 + 邮箱 + 手机 + 密码 + 性别/生日
 authRouter.post('/register', async (req, res) => {
   try {
-    const { username, password, nickname, email, phone, gender, birthday } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ message: '请输入账号和密码' });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ message: '密码长度至少 6 位' });
+    const { nickname, email, phone, password, confirmPassword, gender, birthday } = req.body;
+
+    // 必填校验
+    if (!nickname || !email || !phone || !password) {
+      return res.status(400).json({ message: '请填写昵称、邮箱、手机号和密码' });
     }
 
-    const exists = await prisma.user.findUnique({ where: { username } });
-    if (exists) {
-      return res.status(409).json({ message: '账号已存在' });
+    // 昵称规则：2-20 位，只允许中文、英文、数字、下划线
+    if (!/^\u4e00-\u9fa5a-zA-Z0-9_]{2,20}$/.test(nickname)) {
+      return res.status(400).json({
+        message: '昵称长度 2-20 位，仅支持中文、英文、数字和下划线',
+      });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    // 邮箱格式
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: '请输入有效的邮箱地址' });
+    }
+
+    // 手机号格式（中国大陆）
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: '请输入有效的 11 位手机号' });
+    }
+
+    // 密码规则
+    if (password.length < 6 || password.length > 32) {
+      return res.status(400).json({ message: '密码长度需在 6-32 位之间' });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: '两次输入的密码不一致' });
+    }
+
+    // 唯一性校验
+    const [nicknameExists, emailExists, phoneExists] = await Promise.all([
+      prisma.user.findFirst({ where: { nickname } }),
+      prisma.user.findFirst({ where: { email } }),
+      prisma.user.findFirst({ where: { phone } }),
+    ]);
+    if (nicknameExists) return res.status(409).json({ message: '该昵称已被使用' });
+    if (emailExists) return res.status(409).json({ message: '该邮箱已被注册' });
+    if (phoneExists) return res.status(409).json({ message: '该手机号已被注册' });
+
+    // 创建用户：username 内部使用 email 兼容旧逻辑
     const user = await prisma.user.create({
       data: {
-        username,
-        password: hashed,
-        displayName: nickname || username,
-        nickname: nickname || null,
-        email: email || null,
-        phone: phone || null,
+        username: email,
+        password: md5(password),
+        displayName: nickname,
+        nickname,
+        email,
+        phone,
         gender: gender || null,
         birthday: birthday || null,
         role: 'user',
@@ -166,7 +224,7 @@ authRouter.post('/wechat-login', async (req, res) => {
       user = await prisma.user.create({
         data: {
           username: `wx_${openid.slice(-12)}`,
-          password: await bcrypt.hash(Math.random().toString(36), 10),
+          password: md5(Math.random().toString(36)),
           displayName: baseName,
           nickname: nickname || null,
           avatar: avatar || null,
