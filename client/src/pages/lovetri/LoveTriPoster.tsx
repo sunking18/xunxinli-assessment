@@ -137,8 +137,11 @@ export default function LoveTriPoster() {
     return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
   };
 
-  // 判断是否在微信内置浏览器
-  const isWechat = typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent);
+  // 运行环境判定：微信内置浏览器 / 移动端浏览器 / 电脑浏览器
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isWechat = /MicroMessenger/i.test(ua);
+  const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Windows Phone|HarmonyOS/i.test(ua);
+  const isPC = !isWechat && !isMobile;
 
   // 统一的 Blob 下载/打开辅助：微信内会进入图片预览，方便长按保存/转发
   const openBlob = (blob: Blob, fileName: string) => {
@@ -152,18 +155,44 @@ export default function LoveTriPoster() {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
-  // 下载海报
+  // 电脑端：把图片复制到剪贴板，用户可直接粘贴到微信聊天窗口
+  const copyImageToClipboard = async (blob: Blob): Promise<boolean> => {
+    try {
+      const Ctor = (window as unknown as {
+        ClipboardItem?: new (items: Record<string, Blob>) => ClipboardItem;
+      }).ClipboardItem;
+      if (!navigator.clipboard || !Ctor) return false;
+      await navigator.clipboard.write([new Ctor({ [blob.type || 'image/png']: blob })]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // 下载海报：目标是「把图存到本地/相册」
   const handleDownload = async () => {
     setBusy(true);
     try {
       const blob = await renderPosterBlob();
       if (!blob) return;
       const fileName = `${tri?.cn ?? '爱情三角'}分享海报.png`;
-      openBlob(blob, fileName);
-      if (isWechat) {
-        // 微信内 a[download] 会打开预览，提示用户长按操作
-        setTimeout(() => alert('请长按图片，选择「保存到手机」或「转发给朋友」'), 400);
+
+      // 电脑浏览器：直接下载到本地文件夹
+      if (isPC) {
+        openBlob(blob, fileName);
+        return;
       }
+
+      // 微信内置浏览器：a[download] 会打开大图预览，长按即可存入相册
+      if (isWechat) {
+        openBlob(blob, fileName);
+        setTimeout(() => alert('请长按图片，选择「保存到手机」即可存入相册'), 400);
+        return;
+      }
+
+      // 手机其他浏览器：触发下载/保存
+      openBlob(blob, fileName);
+      setTimeout(() => alert('海报已保存，可在手机相册或「下载」目录中查看'), 400);
     } catch (e) {
       console.error(e);
       alert('海报生成失败，请稍后重试');
@@ -172,28 +201,46 @@ export default function LoveTriPoster() {
     }
   };
 
-  // 分享给微信好友
+  // 转发给微信好友：目标是「把图发给好友」
   const handleShareToWechat = async () => {
     setBusy(true);
     try {
       const blob = await renderPosterBlob();
       if (!blob) return;
       const fileName = `${tri?.cn ?? '爱情三角'}分享海报.png`;
-      if (isWechat) {
-        // 微信内大图片调用 navigator.share 容易闪退，改用打开预览+长按转发
-        openBlob(blob, fileName);
-        setTimeout(() => alert('海报已生成，请长按图片选择「转发给朋友」～'), 400);
+
+      // 电脑端：没有长按操作，优先复制到剪贴板供粘贴发送
+      if (isPC) {
+        const copied = await copyImageToClipboard(blob);
+        if (copied) {
+          alert('海报已复制到剪贴板，去微信聊天窗口按 Ctrl/⌘ + V 粘贴即可发送');
+        } else {
+          openBlob(blob, fileName);
+          alert('海报已下载，把图片拖到微信聊天窗口即可发送给好友');
+        }
         return;
       }
-      // 非微信环境：优先调用系统分享面板
+
+      // 微信内置浏览器：大图预览，长按或右上角菜单转发（iOS 走右上角 ⋯）
+      if (isWechat) {
+        openBlob(blob, fileName);
+        setTimeout(
+          () => alert('请长按图片选择「转发给朋友」；若是 iPhone，可点右上角 ⋯ → 发送给朋友'),
+          400,
+        );
+        return;
+      }
+
+      // 手机其他浏览器：优先拉起系统分享面板（可选微信）
       const file = new File([blob], fileName, { type: blob.type || 'image/png' });
       const shareData: ShareData = { files: [file], title: '我的爱情三角报告', text: copy.guide };
       if (navigator.canShare && navigator.canShare(shareData)) {
         await navigator.share(shareData);
-      } else {
-        openBlob(blob, fileName);
-        alert('已保存海报图片，快去发给你的朋友吧～');
+        return;
       }
+      // 不支持则退回预览，引导长按转发
+      openBlob(blob, fileName);
+      setTimeout(() => alert('请长按图片，选择「转发给朋友」分享给好友'), 400);
     } catch (e) {
       console.error(e);
     } finally {
@@ -463,8 +510,12 @@ export default function LoveTriPoster() {
         </div>
       </div>
 
-      {/* 保存提示 */}
-      <p className="mt-5 text-center text-xs text-white/40">手机端：长按海报图片即可保存分享 · 网页端：点击上方按钮下载</p>
+      {/* 保存提示（页面提示，不参与海报截图） */}
+      <p className="mt-5 text-center text-xs text-white/40">
+        {isPC
+          ? '电脑端：点「转发给微信好友」复制图片，到微信聊天窗口粘贴发送；点「下载海报」保存到本地'
+          : '手机端：长按海报图片即可保存或转发给朋友'}
+      </p>
     </div>
   );
 }
