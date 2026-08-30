@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import {
   IconDashboard, IconClipboard, IconDatabase,
-  IconShare, IconFileText, IconLogout, IconQrCode, IconLock,
+  IconShare, IconFileText, IconLogout, IconQrCode, IconLock, IconUsers,
 } from '../../components/Icons';
 
 interface User {
@@ -25,6 +25,7 @@ const menuGroups = [
     title: '数据与分析',
     items: [
       { to: '/admin/responses', label: '答卷管理', icon: IconDatabase, end: false },
+      { to: '/admin/users', label: '用户管理', icon: IconUsers, end: false },
       { to: '/admin/unlock-codes', label: '深度版解锁管理', icon: IconLock, end: false },
     ],
   },

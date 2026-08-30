@@ -27,6 +27,7 @@ import AdminReportsByAssessment from './pages/admin/AdminReportsByAssessment';
 import AdminResponsesAll from './pages/admin/AdminResponsesAll';
 import AdminAssessmentAnalytics from './pages/admin/AdminAssessmentAnalytics';
 import AdminUnlockCodes from './pages/admin/AdminUnlockCodes';
+import AdminUsers from './pages/admin/AdminUsers';
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,7 @@ function App() {
             <Route path="responses" element={<AdminResponsesAll />} />
             <Route path="responses/:responseId" element={<AdminResponseDetail />} />
             <Route path="assessments/:id/responses" element={<AdminResponses />} />
+            <Route path="users" element={<AdminUsers />} />
             <Route path="distribute" element={<AdminDistribute />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="reports/assessments/:id" element={<AdminReportsByAssessment />} />

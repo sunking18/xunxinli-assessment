@@ -200,6 +200,11 @@ export default function LoveTriPoster() {
   const courseLinks = [COURSE_CONFIG.online, COURSE_CONFIG.offline];
   const hasAnyCourse = courseLinks.some(c => c.url);
 
+  // 根据中文类型名字号自适应：避免"坚守式爱情"这种 5 字标题折行
+  const titleSizeClass = tri.cn.length <= 4 ? 'text-[64px]' : tri.cn.length <= 5 ? 'text-[52px]' : 'text-[44px]';
+  // 分享理由较长，必须在一行展示时按长度压字号
+  const reasonSizeClass = copy.reason.length <= 24 ? 'text-[17px]' : copy.reason.length <= 32 ? 'text-[15px]' : 'text-[13px]';
+
   return (
     <div className="min-h-screen bg-[#140b33] py-6">
       {/* 顶部操作栏 */}
@@ -260,13 +265,13 @@ export default function LoveTriPoster() {
         </div>
       )}
 
-      {/* 海报主体（750px 宽，高度按手机屏幕 19.5:9 比例） */}
+      {/* 海报主体（750px 宽，高度适配完整底部内容） */}
       <div className="flex justify-center px-3">
         <div
           ref={posterRef}
           className="relative flex w-[750px] flex-col overflow-hidden"
           style={{
-            height: 1625,
+            height: 1780,
             background:
               'linear-gradient(165deg,#150b36 0%,#241043 28%,#3b1257 52%,#6b1d63 74%,#b23a58 100%)',
           }}
@@ -313,12 +318,12 @@ export default function LoveTriPoster() {
 
             {/* 类型名 */}
             <div className="mt-2 text-center">
-              <h1 className="text-[64px] font-black tracking-wider text-white" style={{ textShadow: `0 4px 24px ${tri.color}66` }}>
+              <h1 className={`${titleSizeClass} whitespace-nowrap font-black tracking-wider text-white`} style={{ textShadow: `0 4px 24px ${tri.color}66` }}>
                 {tri.cn}
               </h1>
               <p className="mt-1 text-lg font-medium tracking-[0.4em] text-white/65">{tri.en.toUpperCase()}</p>
               <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-5 py-1.5 text-sm text-white/90 backdrop-blur">
-                <span>{tri.emoji}</span> {tri.tag}
+                <span>{tri.emoji}</span> <span className="whitespace-nowrap">{tri.tag}</span>
               </div>
             </div>
 
@@ -337,15 +342,15 @@ export default function LoveTriPoster() {
               </p>
 
               {/* 分享原因 */}
-              <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 px-8 py-5 backdrop-blur">
-                <p className="text-center text-[15px] font-bold tracking-[0.3em] text-white/85">💌 我想把这份爱分享给你</p>
-                <p className="mt-2 text-center text-[17px] leading-8 text-white/90" style={{ textWrap: 'balance' }}>{copy.reason}</p>
+              <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 px-6 py-5 backdrop-blur">
+                <p className="text-center text-[15px] font-bold tracking-[0.2em] text-white/85">💌 我想把这份爱分享给你</p>
+                <p className={`${reasonSizeClass} mt-2 text-center leading-7 text-white/90 whitespace-nowrap`}>{copy.reason}</p>
               </div>
 
               {/* 引导 + 二维码 */}
-              <div className="mt-8 text-center">
+              <div className="mt-6 text-center px-4">
                 <p
-                  className="whitespace-nowrap text-2xl font-bold text-white"
+                  className="text-xl font-bold leading-relaxed text-white"
                   style={{ textShadow: `0 0 24px ${tri.color}99` }}
                 >
                   {copy.guide}
@@ -381,17 +386,17 @@ export default function LoveTriPoster() {
             )}
 
             {/* 七种爱情小人一览 */}
-            <div className="mt-7">
-              <div className="flex items-center justify-between px-1">
+            <div className="mt-6">
+              <div className="flex items-start justify-between">
                 {tri.types.map(t => (
-                  <div key={t.key} className="flex flex-col items-center gap-1.5">
+                  <div key={t.key} className="flex flex-1 flex-col items-center gap-1 px-0.5">
                     <img
                       src={AVATAR_IMG[t.key]}
                       alt={t.cn}
-                      className={`h-10 w-10 object-contain ${t.active ? 'scale-125' : 'opacity-40'}`}
-                      style={t.active ? { boxShadow: `0 0 16px ${tri.color}`, borderRadius: '9999px' } : undefined}
+                      className={`h-9 w-9 object-contain ${t.active ? 'scale-110' : 'opacity-40'}`}
+                      style={t.active ? { boxShadow: `0 0 14px ${tri.color}`, borderRadius: '9999px' } : undefined}
                     />
-                    <span className={`text-[11px] ${t.active ? 'font-bold text-white' : 'text-white/45'}`}>{t.cn}</span>
+                    <span className={`whitespace-nowrap text-center text-[10px] leading-tight ${t.active ? 'font-bold text-white' : 'text-white/45'}`}>{t.cn}</span>
                   </div>
                 ))}
               </div>

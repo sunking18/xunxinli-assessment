@@ -62,15 +62,15 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://q.xunxinli.com}
       WECHAT_APP_ID: ${WECHAT_APP_ID:-}
       WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
-      DEV_SKIP_WECHAT: ${DEV_SKIP_WECHAT:-true}
+      DEV_SKIP_WECHAT: ${DEV_SKIP_WECHAT:-false}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-    # 暴露到宿主机，供 survey-nginx（现有 xunxinli.com 网关容器）反代 /api/
-    # survey-nginx 是另一个独立 docker compose 项目，无法直接用容器名访问 xunxinli-server，
-    # 因此通过宿主机 172.17.0.1:3001 中转。survey-nginx 内配置：proxy_pass http://172.17.0.1:3001;
-    # ⚠️ 暴露 3001 存在风险，建议防火墙限制仅允许 survey-nginx / 可信来源访问。
+    # 宿主机侧用 3011（原 3001 被服务器上其他进程长期占用，无法释放），
+    # 容器内部仍为 3001，server 代码/PORT 环境变量无需改动。
+    # survey-nginx 内配置需同步改为：proxy_pass http://172.17.0.1:3011;
+    # ⚠️ 暴露 3011 存在风险，建议防火墙限制仅允许 survey-nginx / 可信来源访问。
     ports:
-      - "0.0.0.0:3001:3001"
+      - "0.0.0.0:3011:3001"
 
   # 前端（Nginx）
   client:

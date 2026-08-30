@@ -206,6 +206,61 @@ adminRouter.get('/assessments/:id/qrcode', async (req, res) => {
   res.json({ data: { url, dataUrl } });
 });
 
+// ==================== 用户管理 ====================
+// 用户列表：支持按昵称/用户名/显示名搜索，按 createdAt/updatedAt 排序
+adminRouter.get('/users', async (req, res) => {
+  try {
+    const keyword = (req.query.keyword as string)?.trim();
+    const sortBy = (req.query.sortBy as string) || 'createdAt';
+    const sortOrder = (req.query.sortOrder as string) === 'asc' ? 'asc' : 'desc';
+
+    const allowedSortFields = ['id', 'createdAt', 'updatedAt', 'nickname', 'displayName', 'username'];
+    const orderField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
+
+    const where: any = {};
+    if (keyword) {
+      where.OR = [
+        { username: { contains: keyword } },
+        { nickname: { contains: keyword } },
+        { displayName: { contains: keyword } },
+        { email: { contains: keyword } },
+        { phone: { contains: keyword } },
+      ];
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { [orderField]: sortOrder },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        nickname: true,
+        avatar: true,
+        email: true,
+        phone: true,
+        gender: true,
+        birthday: true,
+        wechatOpenId: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const data = users.map(u => ({
+      ...u,
+      // 微信称呼：微信登录用户优先取 nickname，否则 displayName；普通用户为空
+      wechatName: u.wechatOpenId ? (u.nickname || u.displayName || u.username) : null,
+    }));
+
+    res.json({ data });
+  } catch (err) {
+    console.error('获取用户列表失败', err);
+    res.status(500).json({ message: '获取用户列表失败' });
+  }
+});
+
 // ==================== 答卷管理 ====================
 // 全局答卷列表（所有测评，含测评信息；支持按状态筛选）
 adminRouter.get('/responses', async (req, res) => {
