@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
+import html2canvas from 'html2canvas';
 import { api, getErrorMessage } from '../api/client';
 import { getBaseUrl } from '../utils/getBaseUrl';
 import {
   getAssessmentIcon, IconHeart, IconSparkles, IconShare, IconCopy,
-  IconExternal, IconQrCode, IconClipboardList, IconHistory,
+  IconDownload, IconQrCode, IconClipboardList, IconHistory,
 } from '../components/Icons';
 
 interface Assessment {
@@ -25,7 +26,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [shareFor, setShareFor] = useState<Assessment | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [savingImage, setSavingImage] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
+  const shareCardRef = useRef<HTMLDivElement>(null);
 
   const baseUrl = useMemo(() => getBaseUrl(), []);
 
@@ -63,6 +66,32 @@ export default function Home() {
     }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const saveShareImage = async () => {
+    if (!shareCardRef.current || !shareFor) return;
+    setSavingImage(true);
+    try {
+      await document.fonts?.ready;
+      const canvas = await html2canvas(shareCardRef.current, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+      });
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${shareFor.name}分享海报.png`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error(err);
+      alert('图片生成失败，请稍后重试');
+    } finally {
+      setSavingImage(false);
+    }
   };
 
   return (
@@ -184,7 +213,7 @@ export default function Home() {
               <button className="text-text-muted hover:text-text-primary" onClick={() => setShareFor(null)}>✕</button>
             </div>
 
-            <div className="rounded-xl border border-border bg-white p-4">
+            <div ref={shareCardRef} className="rounded-xl border border-border bg-white p-4">
               <div className="flex items-center gap-3 border-b border-border pb-4">
                 <div
                   className="flex h-10 w-10 items-center justify-center rounded-lg text-white"
@@ -224,15 +253,14 @@ export default function Home() {
               >
                 {copiedId === shareFor.id ? '已复制' : <><IconCopy size={16} /> 复制链接</>}
               </button>
-              <a
-                href={`${baseUrl}/fill/${shareFor.code}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-secondary flex-1 py-2.5 text-sm text-center"
+              <button
+                onClick={saveShareImage}
+                disabled={savingImage}
+                className="btn-secondary flex flex-1 items-center justify-center gap-1 py-2.5 text-sm"
               >
-                <IconExternal size={16} />
-                打开测评
-              </a>
+                <IconDownload size={16} />
+                {savingImage ? '生成中...' : '保存图片'}
+              </button>
             </div>
           </div>
         </div>
