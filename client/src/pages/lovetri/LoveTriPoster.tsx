@@ -126,12 +126,27 @@ export default function LoveTriPoster() {
     if (!posterRef.current) return null;
     await document.fonts?.ready;
     const canvas = await html2canvas(posterRef.current, {
-      scale: 2,
+      scale: 1.5,
       useCORS: true,
       backgroundColor: '#140b33',
       logging: false,
     });
     return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  };
+
+  // 判断是否在微信内置浏览器
+  const isWechat = typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent);
+
+  // 统一的 Blob 下载/打开辅助：微信内会进入图片预览，方便长按保存/转发
+  const openBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   // 下载海报
@@ -140,11 +155,12 @@ export default function LoveTriPoster() {
     try {
       const blob = await renderPosterBlob();
       if (!blob) return;
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${tri?.cn ?? '爱情三角'}分享海报.png`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      const fileName = `${tri?.cn ?? '爱情三角'}分享海报.png`;
+      openBlob(blob, fileName);
+      if (isWechat) {
+        // 微信内 a[download] 会打开预览，提示用户长按操作
+        setTimeout(() => alert('请长按图片，选择「保存到手机」或「转发给朋友」'), 400);
+      }
     } catch (e) {
       console.error(e);
       alert('海报生成失败，请稍后重试');
@@ -153,23 +169,27 @@ export default function LoveTriPoster() {
     }
   };
 
-  // 分享给微信好友：优先调用系统分享 API，不支持则保存图片并提示手动发送
+  // 分享给微信好友
   const handleShareToWechat = async () => {
     setBusy(true);
     try {
       const blob = await renderPosterBlob();
       if (!blob) return;
-      const file = new File([blob], `${tri?.cn ?? '爱情三角'}分享海报.png`, { type: 'image/png' });
+      const fileName = `${tri?.cn ?? '爱情三角'}分享海报.png`;
+      if (isWechat) {
+        // 微信内大图片调用 navigator.share 容易闪退，改用打开预览+长按转发
+        openBlob(blob, fileName);
+        setTimeout(() => alert('海报已生成，请长按图片选择「转发给朋友」～'), 400);
+        return;
+      }
+      // 非微信环境：优先调用系统分享面板
+      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
       const shareData: ShareData = { files: [file], title: '我的爱情三角报告', text: copy.guide };
       if (navigator.canShare && navigator.canShare(shareData)) {
         await navigator.share(shareData);
       } else {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${tri?.cn ?? '爱情三角'}分享海报.png`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        alert('已保存海报图片，快去微信发给你的朋友吧～');
+        openBlob(blob, fileName);
+        alert('已保存海报图片，快去发给你的朋友吧～');
       }
     } catch (e) {
       console.error(e);
