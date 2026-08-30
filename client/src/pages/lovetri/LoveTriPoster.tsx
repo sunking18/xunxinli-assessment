@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -80,6 +80,9 @@ export default function LoveTriPoster() {
   const autoShare = searchParams.get('share') === '1';
   const autoSharedRef = useRef(false);
   const posterRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // 海报高度按内容实测自适应，避免固定高度导致中间出现大片空白
+  const [posterHeight, setPosterHeight] = useState<number>(1780);
   const [tri, setTri] = useState<LoveTriData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -198,6 +201,22 @@ export default function LoveTriPoster() {
     }
   };
 
+  // 实测内容高度并同步给海报容器：
+  // 固定 1780px 时内容装不满，多余空间会被 mt-auto 全部挤到雷达图与金句之间
+  useLayoutEffect(() => {
+    if (!tri) return;
+    const measure = () => {
+      const el = contentRef.current;
+      if (!el) return;
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      if (h > 0) setPosterHeight(prev => (Math.abs(prev - h) > 2 ? h : prev));
+    };
+    measure();
+    // 图片/字体异步加载完成后再校准一次
+    const timers = [window.setTimeout(measure, 200), window.setTimeout(measure, 600)];
+    return () => timers.forEach(clearTimeout);
+  }, [tri]);
+
   // 从报告页「转发给微信好友」进入时，自动尝试拉起系统分享
   useEffect(() => {
     if (!autoShare || !tri || autoSharedRef.current || loading) return;
@@ -304,7 +323,7 @@ export default function LoveTriPoster() {
           ref={posterRef}
           className="relative flex w-[750px] flex-col overflow-hidden"
           style={{
-            height: 1780,
+            height: posterHeight,
             background:
               'linear-gradient(165deg,#150b36 0%,#241043 28%,#3b1257 52%,#6b1d63 74%,#b23a58 100%)',
           }}
@@ -331,7 +350,7 @@ export default function LoveTriPoster() {
             ))}
           </div>
 
-          <div className="relative z-10 flex flex-1 flex-col px-12 pb-10 pt-8">
+          <div ref={contentRef} className="relative z-10 flex flex-col px-12 pb-10 pt-8">
             {/* 品牌条 */}
             <div className="flex items-center justify-center gap-2 text-sm tracking-[0.35em] text-white/75">
               <span className="text-pink-300">♥</span> 寻心理 · 斯腾伯格爱情三角 <span className="text-pink-300">♥</span>
@@ -367,8 +386,8 @@ export default function LoveTriPoster() {
               </div>
             </div>
 
-            {/* 底部内容组：贴底分布，与雷达之间空隙自动吸收 */}
-            <div className="mt-auto flex flex-col">
+            {/* 底部内容组：固定间距，海报高度由内容实测决定 */}
+            <div className="mt-6 flex flex-col">
               {/* quote 金句：海报中"你的爱"替换为类型名 */}
               <p className="mt-2 text-center text-[22px] leading-relaxed text-white/90">
                 “{tri.quote.replace(/^你的爱，/, `${tri.cn}，`)}”
