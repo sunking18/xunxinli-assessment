@@ -62,6 +62,10 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://q.xunxinli.com}
       WECHAT_APP_ID: ${WECHAT_APP_ID:-}
       WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      # 微信开放平台「网站应用」：用于电脑浏览器扫码登录（与公众号 AppID 不同）
+      # 两者绑定同一开放平台后，通过 unionid 打通为同一账号
+      WECHAT_WEB_APP_ID: ${WECHAT_WEB_APP_ID:-}
+      WECHAT_WEB_APP_SECRET: ${WECHAT_WEB_APP_SECRET:-}
       DEV_SKIP_WECHAT: ${DEV_SKIP_WECHAT:-false}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}

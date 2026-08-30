@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, getErrorMessage } from '../api/client';
+import { IconQrCode } from '../components/Icons';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -20,11 +21,17 @@ export default function Login() {
   const [birthday, setBirthday] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [wechatConfig, setWechatConfig] = useState<{ enabled: boolean; skipWechat: boolean; appId: string } | null>(null);
+  const [wechatConfig, setWechatConfig] = useState<{
+    enabled: boolean;
+    skipWechat: boolean;
+    appId: string;
+    webLoginEnabled: boolean;
+  } | null>(null);
 
   const params = new URLSearchParams(location.search);
   const returnUrl = params.get('returnUrl') || '/';
   const wxOpenid = params.get('wx_openid');
+  const wxUnionId = params.get('wx_unionid');
   const wxNickname = params.get('wx_nickname');
   const wxAvatar = params.get('wx_avatar');
 
@@ -32,7 +39,7 @@ export default function Login() {
     api
       .get('/wechat/config')
       .then((res) => setWechatConfig(res.data.data))
-      .catch(() => setWechatConfig({ enabled: false, skipWechat: true, appId: '' }));
+      .catch(() => setWechatConfig({ enabled: false, skipWechat: true, appId: '', webLoginEnabled: false }));
   }, []);
 
   // 已登录则跳回
@@ -47,7 +54,7 @@ export default function Login() {
     if (!wxOpenid) return;
     let cancelled = false;
     setSubmitting(true);
-    wechatLogin(wxOpenid, wxNickname || undefined, wxAvatar || undefined)
+    wechatLogin(wxOpenid, wxUnionId || undefined, wxNickname || undefined, wxAvatar || undefined)
       .then(({ user: u }) => {
         if (cancelled) return;
         if (!u.nickname) {
@@ -64,7 +71,7 @@ export default function Login() {
     return () => {
       cancelled = true;
     };
-  }, [wxOpenid, wxNickname, wxAvatar, returnUrl, navigate, wechatLogin]);
+  }, [wxOpenid, wxUnionId, wxNickname, wxAvatar, returnUrl, navigate, wechatLogin]);
 
   const validateNickname = (value: string) => {
     if (!value.trim()) return '请输入昵称';
@@ -103,6 +110,12 @@ export default function Login() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // 电脑浏览器：跳转微信开放平台扫码登录
+  const handleWebScanLogin = () => {
+    const state = encodeURIComponent(returnUrl.replace('/fill/', ''));
+    window.location.href = `/api/wechat/web-authorize?state=${state}`;
   };
 
   const handleWechatLogin = async () => {
@@ -186,6 +199,28 @@ export default function Login() {
                     <p className="text-center text-sm text-text-muted">
                       点击下方按钮将跳转至微信授权页面
                     </p>
+
+                    {wechatConfig.webLoginEnabled && (
+                      <>
+                        <div className="flex items-center gap-3 text-xs text-text-muted">
+                          <span className="h-px flex-1 bg-border" />
+                          <span>或</span>
+                          <span className="h-px flex-1 bg-border" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleWebScanLogin}
+                          disabled={submitting}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-60"
+                        >
+                          <IconQrCode size={16} />
+                          微信扫码登录
+                        </button>
+                        <p className="text-center text-xs text-text-muted">
+                          电脑浏览器可用，扫码后即登录同一账号
+                        </p>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>

@@ -25,7 +25,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (account: string, password: string) => Promise<{ token: string; user: User }>;
   register: (data: RegisterData) => Promise<{ token: string; user: User }>;
-  wechatLogin: (openid: string, nickname?: string, avatar?: string) => Promise<{ token: string; user: User }>;
+  wechatLogin: (openid: string, unionId?: string, nickname?: string, avatar?: string) => Promise<{ token: string; user: User }>;
   updateNickname: (nickname: string) => Promise<{ token: string; user: User }>;
   refreshUser: () => Promise<void>;
   logout: () => void;
@@ -85,8 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { token, user: userData };
   };
 
-  const wechatLogin = async (openid: string, nickname?: string, avatar?: string) => {
-    const res = await api.post('/auth/wechat-login', { openid, nickname, avatar });
+  const wechatLogin = async (openid: string, unionId?: string, nickname?: string, avatar?: string) => {
+    const res = await api.post('/auth/wechat-login', { openid, unionId, nickname, avatar });
     const { token, user: userData } = res.data.data;
     applyLogin(token, userData);
     return { token, user: userData };

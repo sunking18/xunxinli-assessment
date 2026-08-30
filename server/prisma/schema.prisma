@@ -24,12 +24,15 @@ model User {
   phone        String?  // 电话（注册补充，应用层校验唯一性）
   gender       String?  // 性别（注册补充）
   birthday     String?  // 生日（注册补充）
-  wechatOpenId String?  @unique
-  status       String   @default("active") // 用户状态：active 正常 / blocked 禁用 / deleted 删除
-  role         String   @default("admin")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  responses    Response[]
+  wechatOpenId  String?  @unique
+  wechatUnionId String?  // 微信开放平台 unionid：公众号授权与网站扫码登录共用的唯一标识
+  status        String   @default("active") // 用户状态：active 正常 / blocked 禁用 / deleted 删除
+  role          String   @default("admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  responses     Response[]
+
+  @@index([wechatUnionId])
 }
 
 // 统一测评表：一个测评一行，题目/维度/报告模板均为 JSON

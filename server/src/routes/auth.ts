@@ -188,40 +188,55 @@ authRouter.post('/register', async (req, res) => {
 // 微信登录 / 模拟登录：根据 openid 查找或创建用户
 authRouter.post('/wechat-login', async (req, res) => {
   try {
-    const { openid, nickname, avatar } = req.body;
+    const { openid, unionId, nickname, avatar } = req.body;
     if (!openid) {
       return res.status(400).json({ message: '缺少微信授权信息' });
     }
 
-    let user = await prisma.user.findUnique({ where: { wechatOpenId: openid } });
+    let user = null;
+
+    // 1. 优先按 unionid 查找：公众号内授权与电脑扫码登录指向同一账号
+    if (unionId) {
+      user = await prisma.user.findFirst({ where: { wechatUnionId: unionId } });
+    }
+
+    // 2. 退化为按 openid 查找
     if (!user) {
-      // 模拟登录：若提供了昵称，尝试按昵称合并已有的同名账号。
-      // 这样「哈哈」「聊聊」每次模拟登录都进入同一主账号，且能查到该昵称下所有历史答卷。
-      if (nickname) {
-        const sameNameUsers = await prisma.user.findMany({ where: { nickname } });
-        if (sameNameUsers.length > 0) {
-          sameNameUsers.sort((a, b) => a.id - b.id);
-          user = sameNameUsers[0];
-          // 把其它同名账号的答卷归属到主账号
-          const others = sameNameUsers.slice(1);
-          for (const other of others) {
-            await prisma.response.updateMany({
-              where: { userId: other.id },
-              data: { userId: user.id },
-            });
-          }
-          // 删除冗余账号（答卷已迁移）
-          if (others.length > 0) {
-            await prisma.user.deleteMany({ where: { id: { in: others.map(u => u.id) } } });
-          }
-          // 绑定当前 openid，保证下次也能用 openid 直接匹配
-          user = await prisma.user.update({
-            where: { id: user.id },
-            data: { wechatOpenId: openid },
+      user = await prisma.user.findUnique({ where: { wechatOpenId: openid } });
+    }
+
+    // 3. 命中 unionid 账号后，若该 openid 还挂在另一个账号上，合并到主账号
+    if (user && unionId && user.wechatUnionId === unionId) {
+      const otherByOpenId = await prisma.user.findUnique({ where: { wechatOpenId: openid } });
+      if (otherByOpenId && otherByOpenId.id !== user.id) {
+        await prisma.response.updateMany({
+          where: { userId: otherByOpenId.id },
+          data: { userId: user.id },
+        });
+        await prisma.user.delete({ where: { id: otherByOpenId.id } });
+      }
+    }
+
+    // 4. 都找不到时，模拟登录按昵称合并同名账号
+    if (!user && nickname) {
+      const sameNameUsers = await prisma.user.findMany({ where: { nickname } });
+      if (sameNameUsers.length > 0) {
+        sameNameUsers.sort((a, b) => a.id - b.id);
+        user = sameNameUsers[0];
+        const others = sameNameUsers.slice(1);
+        for (const other of others) {
+          await prisma.response.updateMany({
+            where: { userId: other.id },
+            data: { userId: user.id },
           });
+        }
+        if (others.length > 0) {
+          await prisma.user.deleteMany({ where: { id: { in: others.map(u => u.id) } } });
         }
       }
     }
+
+    // 5. 仍然没有则创建新用户
     if (!user) {
       const baseName = nickname || `微信用户_${openid.slice(-6)}`;
       user = await prisma.user.create({
@@ -232,14 +247,22 @@ authRouter.post('/wechat-login', async (req, res) => {
           nickname: nickname || null,
           avatar: avatar || null,
           wechatOpenId: openid,
+          wechatUnionId: unionId || null,
           role: 'user',
         },
       });
-    } else if (nickname && !user.nickname) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { nickname },
-      });
+    } else {
+      // 6. 回填 unionid / openid / 昵称，保证老账号逐步打通
+      const updateData: any = {};
+      if (unionId && user.wechatUnionId !== unionId) updateData.wechatUnionId = unionId;
+      if (!user.wechatOpenId) updateData.wechatOpenId = openid;
+      if (nickname && !user.nickname) updateData.nickname = nickname;
+      if (Object.keys(updateData).length > 0) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: updateData,
+        });
+      }
     }
 
     if (user.status !== 'active') {
