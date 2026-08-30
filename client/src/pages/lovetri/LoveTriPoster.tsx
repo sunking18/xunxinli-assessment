@@ -350,18 +350,18 @@ export default function LoveTriPoster() {
             {/* 底部内容组：贴底分布，与雷达之间空隙自动吸收 */}
             <div className="mt-auto flex flex-col">
               {/* quote 金句：海报中"你的爱"替换为类型名 */}
-              <p className="mt-5 text-center text-[22px] leading-relaxed text-white/90">
+              <p className="mt-2 text-center text-[22px] leading-relaxed text-white/90">
                 “{tri.quote.replace(/^你的爱，/, `${tri.cn}，`)}”
               </p>
 
               {/* 分享原因 */}
-              <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 px-6 py-5 backdrop-blur">
+              <div className="mt-4 rounded-2xl border border-white/20 bg-white/10 px-6 py-5 backdrop-blur">
                 <p className="text-center text-[15px] font-bold tracking-[0.2em] text-white/85">💌 我想把这份爱分享给你</p>
-                <p className={`${reasonSizeClass} mt-2 text-center leading-7 text-white/90 whitespace-nowrap`}>{copy.reason}</p>
+                <p className={`${reasonSizeClass} mt-2 text-center leading-snug text-white/90`}>{copy.reason}</p>
               </div>
 
               {/* 引导 + 二维码 */}
-              <div className="mt-6 text-center px-4">
+              <div className="mt-4 text-center px-4">
                 <p
                   className="text-xl font-bold leading-relaxed text-white"
                   style={{ textShadow: `0 0 24px ${tri.color}99` }}
@@ -385,7 +385,7 @@ export default function LoveTriPoster() {
 
             {/* 团辅课程报名（预留，配置 COURSE_CONFIG 后自动展示） */}
             {hasAnyCourse && (
-              <div className="mt-8 rounded-2xl border border-white/20 bg-white/10 px-8 py-5 backdrop-blur">
+              <div className="mt-4 rounded-2xl border border-white/20 bg-white/10 px-8 py-5 backdrop-blur">
                 <p className="text-center text-[15px] font-bold tracking-[0.25em] text-white/85">🎓 爱情成长团辅课程</p>
                 <div className="mt-4 flex justify-center gap-4">
                   {courseLinks.map(c => c.url ? (
@@ -399,17 +399,17 @@ export default function LoveTriPoster() {
             )}
 
             {/* 七种爱情小人一览 */}
-            <div className="mt-6">
+            <div className="mt-4">
               <div className="flex items-start justify-between">
                 {tri.types.map(t => (
-                  <div key={t.key} className="flex flex-1 flex-col items-center gap-1 px-0.5">
+                  <div key={t.key} className="flex flex-1 flex-col items-center gap-0.5 px-0">
                     <img
                       src={AVATAR_IMG[t.key]}
                       alt={t.cn}
-                      className={`h-9 w-9 object-contain ${t.active ? 'scale-110' : 'opacity-40'}`}
-                      style={t.active ? { boxShadow: `0 0 14px ${tri.color}`, borderRadius: '9999px' } : undefined}
+                      className={`h-7 w-7 object-contain ${t.active ? 'scale-110' : 'opacity-40'}`}
+                      style={t.active ? { boxShadow: `0 0 12px ${tri.color}`, borderRadius: '9999px' } : undefined}
                     />
-                    <span className={`whitespace-nowrap text-center text-[10px] leading-tight ${t.active ? 'font-bold text-white' : 'text-white/45'}`}>{t.cn}</span>
+                    <span className={`whitespace-nowrap text-center text-[8px] leading-tight ${t.active ? 'font-bold text-white' : 'text-white/45'}`}>{t.cn}</span>
                   </div>
                 ))}
               </div>
