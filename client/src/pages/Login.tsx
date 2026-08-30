@@ -7,7 +7,7 @@ import { IconQrCode } from '../components/Icons';
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading, login, wechatLogin, setToken } = useAuth();
+  const { user, loading, login, register, wechatLogin, setToken } = useAuth();
 
   const [tab, setTab] = useState<'wechat' | 'account'>('wechat');
   const [mode, setMode] = useState<'login' | 'register'>('login');
