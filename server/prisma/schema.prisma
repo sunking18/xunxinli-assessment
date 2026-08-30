@@ -35,6 +35,46 @@ model User {
   @@index([wechatUnionId])
 }
 
+// 后台管理员：与 C 端 User 表完全分离
+// - 不支持注册、不支持邮箱/手机号登录，只能用「管理员账号 + 密码」登录
+// - role=super 为超级管理员，账号密码由服务端环境变量 ADMIN_USERNAME / ADMIN_PASSWORD 配置，
+//   每次登录以环境变量为准并自动同步到本表（保证改密码立即生效、且操作日志可追溯）
+// - 后续需要多个管理员时，由超级管理员在本表新增账号即可
+model Admin {
+  id          Int      @id @default(autoincrement())
+  username    String   @unique
+  password    String   // md5 加密后的密码
+  displayName String
+  role        String   @default("admin") // super=超级管理员 / admin=普通管理员
+  status      String   @default("active") // active 正常 / disabled 停用
+  lastLoginAt DateTime?
+  lastLoginIp String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  logs        AdminLog[]
+
+  @@index([status])
+}
+
+// 管理员操作日志：记录后台所有关键操作，便于审计追溯
+model AdminLog {
+  id        Int      @id @default(autoincrement())
+  adminId   Int?
+  admin     Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  username  String   // 冗余保存，管理员被删除后仍可追溯
+  action    String   // login / create / update / delete / restore / export / revoke / ...
+  module    String   // auth / assessment / response / user / unlock_code / order / admin
+  targetId  String?
+  detail    String?  @db.Text
+  ip        String?
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([createdAt])
+  @@index([module])
+}
+
 // 统一测评表：一个测评一行，题目/维度/报告模板均为 JSON
 model Assessment {
   id              Int      @id @default(autoincrement())

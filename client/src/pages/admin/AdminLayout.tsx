@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { api } from '../../api/client';
+import { api, ADMIN_TOKEN_KEY } from '../../api/client';
 import {
   IconDashboard, IconClipboard, IconDatabase,
   IconShare, IconFileText, IconLogout, IconQrCode, IconLock, IconUsers,
+  IconBriefcase, IconHistory,
 } from '../../components/Icons';
 
-interface User {
+interface AdminUser {
   id: number;
   username: string;
   displayName: string;
@@ -41,34 +42,41 @@ const menuGroups = [
       { to: '/admin/reports', label: '报告列表', icon: IconFileText, end: false },
     ],
   },
+  {
+    title: '系统设置',
+    items: [
+      { to: '/admin/admins', label: '管理员账号', icon: IconBriefcase, end: false },
+      { to: '/admin/logs', label: '操作日志', icon: IconHistory, end: false },
+    ],
+  },
 ];
 
 export default function AdminLayout() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const [admin, setAdmin] = useState<AdminUser | null>(null);
 
   useEffect(() => {
-    const cached = localStorage.getItem('user');
+    const cached = localStorage.getItem('admin_user');
     if (cached) {
-      try { setUser(JSON.parse(cached)); } catch { /* ignore */ }
+      try { setAdmin(JSON.parse(cached)); } catch { /* ignore */ }
     }
-    // 校验 token 有效性
-    api.get('/auth/me')
+    // 校验管理员 token 有效性（后台走独立的 /auth/admin/me）
+    api.get('/auth/admin/me')
       .then(res => {
-        const u = res.data.data;
-        setUser(u);
-        localStorage.setItem('user', JSON.stringify(u));
+        const u = res.data.data.admin;
+        setAdmin(u);
+        localStorage.setItem('admin_user', JSON.stringify(u));
       })
       .catch(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        localStorage.removeItem('admin_user');
         navigate('/admin/login');
       });
   }, [navigate]);
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    localStorage.removeItem('admin_user');
     navigate('/admin/login');
   };
 
@@ -120,11 +128,13 @@ export default function AdminLayout() {
         <div className="border-t border-border p-4">
           <div className="mb-3 flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-sm font-bold text-primary">
-              {(user?.displayName || user?.username || 'A').charAt(0).toUpperCase()}
+              {(admin?.displayName || admin?.username || 'A').charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-text-primary">{user?.displayName || '管理员'}</div>
-              <div className="truncate text-xs text-text-muted">{user?.role === 'admin' ? '管理员' : '编辑'}</div>
+              <div className="truncate text-sm font-medium text-text-primary">{admin?.displayName || '管理员'}</div>
+              <div className="truncate text-xs text-text-muted">
+                {admin?.role === 'super' ? '超级管理员' : '管理员'}
+              </div>
             </div>
           </div>
           <Link to="/" className="mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-text-muted transition hover:bg-background hover:text-text-primary">

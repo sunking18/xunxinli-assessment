@@ -29,6 +29,8 @@ import AdminResponsesAll from './pages/admin/AdminResponsesAll';
 import AdminAssessmentAnalytics from './pages/admin/AdminAssessmentAnalytics';
 import AdminUnlockCodes from './pages/admin/AdminUnlockCodes';
 import AdminUsers from './pages/admin/AdminUsers';
+import AdminAccounts from './pages/admin/AdminAccounts';
+import AdminLogs from './pages/admin/AdminLogs';
 
 const queryClient = new QueryClient();
 
@@ -91,6 +93,8 @@ function App() {
             <Route path="reports" element={<AdminReports />} />
             <Route path="reports/assessments/:id" element={<AdminReportsByAssessment />} />
             <Route path="unlock-codes" element={<AdminUnlockCodes />} />
+            <Route path="admins" element={<AdminAccounts />} />
+            <Route path="logs" element={<AdminLogs />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

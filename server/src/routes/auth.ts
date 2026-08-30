@@ -4,6 +4,13 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import {
+  authenticateAdmin,
+  AdminRequest,
+  signAdminToken,
+  logAdminAction,
+  getClientIp,
+} from '../middleware/adminAuth';
 
 const authRouter = Router();
 const prisma = new PrismaClient();
@@ -407,6 +414,178 @@ authRouter.patch('/password', authenticate, async (req: AuthRequest, res) => {
   } catch (err) {
     console.error('修改密码失败', err);
     res.status(500).json({ message: '修改密码失败' });
+  }
+});
+
+// ==================== 管理后台独立登录 ====================
+// 与上方 C 端登录（邮箱/手机号/微信）完全分离：
+//  1. 只认「管理员账号 + 密码」，不支持邮箱/手机号登录
+//  2. 不提供注册入口，账号来源只有两个：
+//     - 服务端环境变量 ADMIN_USERNAME / ADMIN_PASSWORD 配置的超级管理员
+//     - 超级管理员在 Admin 表中新增的普通管理员
+//  3. 超级管理员密码以环境变量为准，改配置后下次登录立即生效
+
+// 管理后台登录
+authRouter.post('/admin/login', async (req, res) => {
+  try {
+    const loginName = String(req.body?.username ?? req.body?.account ?? '').trim();
+    const password = String(req.body?.password ?? '');
+    if (!loginName || !password) {
+      return res.status(400).json({ message: '请输入管理员账号和密码' });
+    }
+
+    const envUsername = (process.env.ADMIN_USERNAME || 'admin').trim();
+    const envPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+    let admin: any = null;
+
+    if (loginName === envUsername) {
+      // 超级管理员：密码始终以服务端配置为准，首次登录自动落库，改配置即时生效
+      if (password !== envPassword) {
+        await logAdminAction({
+          admin: { adminId: 0, username: loginName },
+          action: 'login_fail',
+          module: 'auth',
+          detail: '密码错误',
+          req,
+        });
+        return res.status(401).json({ message: '账号或密码错误' });
+      }
+      admin = await prisma.admin.upsert({
+        where: { username: envUsername },
+        create: {
+          username: envUsername,
+          password: md5(envPassword),
+          displayName: '超级管理员',
+          role: 'super',
+        },
+        update: {
+          password: md5(envPassword),
+          role: 'super',
+        },
+      });
+    } else {
+      admin = await prisma.admin.findUnique({ where: { username: loginName } });
+      if (!admin) {
+        await logAdminAction({
+          admin: { adminId: 0, username: loginName },
+          action: 'login_fail',
+          module: 'auth',
+          detail: '账号不存在',
+          req,
+        });
+        return res.status(401).json({ message: '账号或密码错误' });
+      }
+      if (admin.status !== 'active') {
+        return res.status(403).json({ message: '该管理员账号已停用' });
+      }
+      if (admin.password !== md5(password)) {
+        await logAdminAction({
+          admin: { adminId: admin.id, username: admin.username },
+          action: 'login_fail',
+          module: 'auth',
+          detail: '密码错误',
+          req,
+        });
+        return res.status(401).json({ message: '账号或密码错误' });
+      }
+    }
+
+    await prisma.admin.update({
+      where: { id: admin.id },
+      data: { lastLoginAt: new Date(), lastLoginIp: getClientIp(req) },
+    });
+
+    const payload = {
+      type: 'admin' as const,
+      adminId: admin.id,
+      username: admin.username,
+      role: admin.role,
+      displayName: admin.displayName,
+    };
+    const token = signAdminToken(payload);
+    await logAdminAction({
+      admin: payload,
+      action: 'login',
+      module: 'auth',
+      detail: '登录管理后台',
+      req,
+    });
+
+    res.json({
+      message: '登录成功',
+      data: {
+        token,
+        admin: {
+          id: admin.id,
+          username: admin.username,
+          displayName: admin.displayName,
+          role: admin.role,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('管理后台登录失败', err);
+    res.status(500).json({ message: '登录失败，请稍后重试' });
+  }
+});
+
+// 管理后台：获取当前登录管理员
+authRouter.get('/admin/me', authenticateAdmin, async (req: AdminRequest, res) => {
+  const admin = req.admin!;
+  res.json({
+    message: 'success',
+    data: {
+      admin: {
+        id: admin.adminId,
+        username: admin.username,
+        displayName: admin.displayName,
+        role: admin.role,
+      },
+    },
+  });
+});
+
+// 管理后台：修改当前管理员密码（超级管理员密码由服务端环境变量管理）
+authRouter.patch('/admin/password', authenticateAdmin, async (req: AdminRequest, res) => {
+  try {
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: '请填写完整密码信息' });
+    }
+    if (newPassword.length < 6 || newPassword.length > 32) {
+      return res.status(400).json({ message: '新密码长度需在 6-32 位之间' });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: '两次输入的新密码不一致' });
+    }
+
+    const admin = await prisma.admin.findUnique({ where: { id: req.admin!.adminId } });
+    if (!admin) return res.status(404).json({ message: '管理员账号不存在' });
+    if (admin.role === 'super') {
+      return res.status(400).json({
+        message: '超级管理员密码由服务端配置 ADMIN_PASSWORD 管理，请在该处修改',
+      });
+    }
+    if (admin.password !== md5(oldPassword)) {
+      return res.status(400).json({ message: '原密码错误' });
+    }
+
+    await prisma.admin.update({
+      where: { id: admin.id },
+      data: { password: md5(newPassword) },
+    });
+    await logAdminAction({
+      admin: req.admin!,
+      action: 'update',
+      module: 'auth',
+      detail: '修改登录密码',
+      req,
+    });
+    res.json({ message: '密码修改成功' });
+  } catch (err) {
+    console.error('管理员修改密码失败', err);
+    res.status(500).json({ message: '修改密码失败，请稍后重试' });
   }
 });
 

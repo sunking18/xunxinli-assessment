@@ -168,3 +168,42 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
+-- ---------- 后台管理员与操作日志 ----------
+-- 说明：管理后台账号体系独立于前台 User 表，不开放注册。
+-- 超级管理员（role=super）的账号密码由服务端环境变量 ADMIN_USERNAME / ADMIN_PASSWORD 配置，
+-- 首次登录时会自动写入下表，此后改配置即时生效。
+
+CREATE TABLE IF NOT EXISTS `Admin` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `username` varchar(191) NOT NULL,
+  `password` varchar(191) NOT NULL,
+  `displayName` varchar(191) NOT NULL,
+  `role` varchar(191) NOT NULL DEFAULT 'admin',
+  `status` varchar(191) NOT NULL DEFAULT 'active',
+  `lastLoginAt` datetime(3) DEFAULT NULL,
+  `lastLoginIp` varchar(191) DEFAULT NULL,
+  `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` datetime(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `Admin_username_key` (`username`),
+  KEY `Admin_status_idx` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `AdminLog` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `adminId` int DEFAULT NULL,
+  `username` varchar(191) NOT NULL,
+  `action` varchar(191) NOT NULL,
+  `module` varchar(191) NOT NULL,
+  `targetId` varchar(191) DEFAULT NULL,
+  `detail` text,
+  `ip` varchar(191) DEFAULT NULL,
+  `userAgent` text,
+  `createdAt` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `AdminLog_adminId_createdAt_idx` (`adminId`,`createdAt`),
+  KEY `AdminLog_createdAt_idx` (`createdAt`),
+  KEY `AdminLog_module_idx` (`module`),
+  CONSTRAINT `AdminLog_adminId_fkey` FOREIGN KEY (`adminId`) REFERENCES `Admin` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

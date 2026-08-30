@@ -1,30 +1,31 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, getErrorMessage } from '../../api/client';
-import { TOKEN_KEY } from '../../api/client';
+import { api, getErrorMessage, ADMIN_TOKEN_KEY } from '../../api/client';
+import { IconLock, IconUser } from '../../components/Icons';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const autoLogin = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await api.post('/auth/login', { account: 'admin', password: 'admin123' });
-        localStorage.setItem(TOKEN_KEY, res.data.data.token);
-        localStorage.setItem('user', JSON.stringify(res.data.data.user));
-        navigate('/admin');
-      } catch (err) {
-        setError(getErrorMessage(err, '自动登录失败'));
-        setLoading(false);
-      }
-    };
-
-    autoLogin();
-  }, [navigate]);
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/auth/admin/login', { username, password });
+      // 后台登录态与 C 端用户分开存储，互不影响
+      localStorage.setItem(ADMIN_TOKEN_KEY, res.data.data.token);
+      localStorage.setItem('admin_user', JSON.stringify(res.data.data.admin));
+      navigate('/admin');
+    } catch (err) {
+      setError(getErrorMessage(err, '登录失败'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -36,13 +37,49 @@ export default function AdminLogin() {
         </div>
 
         <div className="card p-8">
-          {error ? (
-            <div className="rounded-lg bg-danger/10 px-4 py-2.5 text-center text-sm text-danger">{error}</div>
-          ) : (
-            <div className="py-4 text-center text-text-secondary">
-              {loading && '正在进入管理后台...'}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="label">管理员账号</label>
+              <div className="relative">
+                <IconUser className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                <input
+                  className="input pl-10"
+                  placeholder="请输入管理员账号"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </div>
             </div>
-          )}
+            <div>
+              <label className="label">密码</label>
+              <div className="relative">
+                <IconLock className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                <input
+                  type="password"
+                  className="input pl-10"
+                  placeholder="请输入密码"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-lg bg-danger/10 px-4 py-2.5 text-sm text-danger">{error}</div>
+            )}
+
+            <button className="btn-primary w-full py-3" disabled={loading}>
+              {loading ? '登录中...' : '登 录'}
+            </button>
+
+            <p className="text-center text-xs text-text-muted">
+              管理后台账号由超级管理员分配，不开放注册，也不支持邮箱 / 手机号登录
+            </p>
+          </form>
         </div>
 
         <div className="mt-6 text-center">

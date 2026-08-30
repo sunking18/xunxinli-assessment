@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import QRCode from 'qrcode';
 import { prisma } from '../utils/prisma';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import {
+  authenticateAdmin,
+  AdminRequest,
+  requireSuperAdmin,
+  logAdminAction,
+  md5,
+} from '../middleware/adminAuth';
 
 export const adminRouter = Router();
 
@@ -21,7 +27,8 @@ function jsonOrNull(value: any): any {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-adminRouter.use(authenticate);
+// 管理后台统一使用管理员鉴权（与 C 端用户账号体系分离）
+adminRouter.use(authenticateAdmin);
 
 // ==================== 仪表盘统计 ====================
 adminRouter.get('/stats', async (req, res) => {
@@ -113,7 +120,7 @@ adminRouter.get('/assessments/:id', async (req, res) => {
   res.json({ data: assessment });
 });
 
-adminRouter.post('/assessments', async (req, res) => {
+adminRouter.post('/assessments', async (req: AdminRequest, res) => {
   const { code, name, nameEn, category, description, instructions, coverColor, icon, questions, dimensions, reportTemplates, status, sortOrder, enablePairMatch } = req.body;
   if (!code || !name || !Array.isArray(questions)) {
     return res.status(400).json({ message: '缺少必填字段（code / name / questions）' });
@@ -139,10 +146,18 @@ adminRouter.post('/assessments', async (req, res) => {
       enablePairMatch: enablePairMatch ?? false,
     },
   });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'create',
+    module: 'assessment',
+    targetId: assessment.id,
+    detail: `创建测评「${name}」（${code}）`,
+    req,
+  });
   res.status(201).json({ message: '测评创建成功', data: assessment });
 });
 
-adminRouter.put('/assessments/:id', async (req, res) => {
+adminRouter.put('/assessments/:id', async (req: AdminRequest, res) => {
   const id = Number(req.params.id);
   const { code, name, nameEn, category, description, instructions, coverColor, icon, questions, dimensions, reportTemplates, status, sortOrder, enablePairMatch } = req.body;
 
@@ -173,24 +188,48 @@ adminRouter.put('/assessments/:id', async (req, res) => {
       enablePairMatch: enablePairMatch ?? assessment.enablePairMatch,
     },
   });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'update',
+    module: 'assessment',
+    targetId: id,
+    detail: `更新测评「${updated.name}」（${updated.code}）`,
+    req,
+  });
   res.json({ message: '测评已更新', data: updated });
 });
 
-adminRouter.delete('/assessments/:id', async (req, res) => {
+adminRouter.delete('/assessments/:id', async (req: AdminRequest, res) => {
   const id = Number(req.params.id);
   const assessment = await prisma.assessment.findUnique({ where: { id } });
   if (!assessment) return res.status(404).json({ message: '测评不存在' });
   await prisma.assessment.update({ where: { id }, data: { status: 'deleted' } });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'delete',
+    module: 'assessment',
+    targetId: id,
+    detail: `删除测评「${assessment.name}」（${assessment.code}）`,
+    req,
+  });
   res.json({ message: '测评已标记为删除状态，可在列表中恢复' });
 });
 
 // 恢复被软删除的测评
-adminRouter.post('/assessments/:id/restore', async (req, res) => {
+adminRouter.post('/assessments/:id/restore', async (req: AdminRequest, res) => {
   const id = Number(req.params.id);
   const assessment = await prisma.assessment.findUnique({ where: { id } });
   if (!assessment) return res.status(404).json({ message: '测评不存在' });
   if (assessment.status !== 'deleted') return res.status(400).json({ message: '该测评未处于删除状态，无需恢复' });
   await prisma.assessment.update({ where: { id }, data: { status: 'published' } });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'restore',
+    module: 'assessment',
+    targetId: id,
+    detail: `恢复测评「${assessment.name}」（${assessment.code}）`,
+    req,
+  });
   res.json({ message: '测评已恢复' });
 });
 
@@ -267,7 +306,7 @@ adminRouter.get('/users', async (req, res) => {
 });
 
 // 管理员修改用户状态（正常 / 禁用 / 删除）
-adminRouter.patch('/users/:id/status', async (req, res) => {
+adminRouter.patch('/users/:id/status', async (req: AdminRequest, res) => {
   try {
     const id = Number(req.params.id);
     const { status } = req.body;
@@ -281,6 +320,15 @@ adminRouter.patch('/users/:id/status', async (req, res) => {
     await prisma.user.update({
       where: { id },
       data: { status },
+    });
+    const statusText: Record<string, string> = { active: '恢复正常', blocked: '禁用', deleted: '删除' };
+    await logAdminAction({
+      admin: req.admin!,
+      action: status === 'deleted' ? 'delete' : 'update',
+      module: 'user',
+      targetId: id,
+      detail: `将用户 #${id} 状态改为 ${status}（${statusText[status] || status}）`,
+      req,
     });
     res.json({ message: '用户状态已更新' });
   } catch (err) {
@@ -693,20 +741,36 @@ adminRouter.get('/responses/:id', async (req, res) => {
 });
 
 // 管理员删除答卷（物理删除，不可恢复）
-adminRouter.delete('/responses/:id', async (req, res) => {
+adminRouter.delete('/responses/:id', async (req: AdminRequest, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '答卷 ID 无效' });
   await prisma.response.delete({ where: { id } });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'delete',
+    module: 'response',
+    targetId: id,
+    detail: `删除答卷 #${id}`,
+    req,
+  });
   res.json({ message: '答卷已删除' });
 });
 
 // 导出答卷数据（CSV / JSON）
-adminRouter.get('/assessments/:id/responses/export', async (req, res) => {
+adminRouter.get('/assessments/:id/responses/export', async (req: AdminRequest, res) => {
   const id = Number(req.params.id);
   const mode = (req.query.mode as 'option' | 'score' | undefined) || 'option';
   const format = (req.query.format as 'csv' | 'json' | undefined) || 'csv';
   const assessment = await prisma.assessment.findUnique({ where: { id } });
   if (!assessment) return res.status(404).json({ message: '测评不存在' });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'export',
+    module: 'response',
+    targetId: id,
+    detail: `导出测评「${assessment.name}」答卷（${format.toUpperCase()}）`,
+    req,
+  });
 
   const questions = parseJson<any[]>(assessment.questions);
   const responses = await prisma.response.findMany({
@@ -819,7 +883,7 @@ adminRouter.get('/assessments/:id/responses/export', async (req, res) => {
 
 // ===== 兑换码管理（深度版解锁）=====
 // 批量生成兑换码
-adminRouter.post('/unlock-codes/generate', async (req, res) => {
+adminRouter.post('/unlock-codes/generate', async (req: AdminRequest, res) => {
   const { count = 10, amount = 9.9 } = req.body;
   const n = Math.min(Math.max(Number(count) || 10, 1), 500);
   const gen = () => {
@@ -829,6 +893,13 @@ adminRouter.post('/unlock-codes/generate', async (req, res) => {
   const codes = Array.from({ length: n }, () => gen());
   await prisma.unlockCode.createMany({
     data: codes.map(code => ({ code, amount: Number(amount) || 9.9 })),
+  });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'create',
+    module: 'unlock_code',
+    detail: `批量生成 ${n} 个兑换码（面额 ${Number(amount) || 9.9}）`,
+    req,
   });
   res.json({ message: `已生成 ${n} 个兑换码`, data: { count: n, codes } });
 });
@@ -853,12 +924,20 @@ adminRouter.get('/unlock-codes', async (req, res) => {
 });
 
 // 作废兑换码
-adminRouter.post('/unlock-codes/:id/revoke', async (req, res) => {
+adminRouter.post('/unlock-codes/:id/revoke', async (req: AdminRequest, res) => {
   const id = Number(req.params.id);
   const uc = await prisma.unlockCode.findUnique({ where: { id } });
   if (!uc) return res.status(404).json({ message: '兑换码不存在' });
   if (uc.status === 'used') return res.status(400).json({ message: '已使用的兑换码不能作废' });
   await prisma.unlockCode.update({ where: { id }, data: { status: 'revoked' } });
+  await logAdminAction({
+    admin: req.admin!,
+    action: 'revoke',
+    module: 'unlock_code',
+    targetId: id,
+    detail: `作废兑换码 ${uc.code}`,
+    req,
+  });
   res.json({ message: '已作废' });
 });
 
@@ -876,4 +955,196 @@ adminRouter.get('/orders', async (req, res) => {
     }),
   ]);
   res.json({ data: { total, list, page, pageSize } });
+});
+
+// ==================== 管理员账号管理 ====================
+// 说明：管理后台不开放注册，账号只能由超级管理员在此创建。
+// 超级管理员（role=super）的账号密码由服务端环境变量 ADMIN_USERNAME / ADMIN_PASSWORD 配置。
+
+const ADMIN_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  role: true,
+  status: true,
+  lastLoginAt: true,
+  lastLoginIp: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+// 管理员列表（仅超级管理员）
+adminRouter.get('/admins', requireSuperAdmin, async (_req, res) => {
+  try {
+    const list = await prisma.admin.findMany({
+      orderBy: [{ role: 'asc' }, { id: 'asc' }],
+      select: ADMIN_SELECT,
+    });
+    res.json({ data: { list } });
+  } catch (err) {
+    console.error('获取管理员列表失败', err);
+    res.status(500).json({ message: '获取管理员列表失败' });
+  }
+});
+
+// 新增管理员（仅超级管理员）
+adminRouter.post('/admins', requireSuperAdmin, async (req: AdminRequest, res) => {
+  try {
+    const { username, password, displayName } = req.body;
+    const name = String(username || '').trim();
+    const pwd = String(password || '');
+
+    if (!/^[a-zA-Z0-9_]{3,32}$/.test(name)) {
+      return res.status(400).json({ message: '账号需为 3-32 位字母、数字或下划线' });
+    }
+    if (pwd.length < 6 || pwd.length > 32) {
+      return res.status(400).json({ message: '密码长度需在 6-32 位之间' });
+    }
+    if (name === (process.env.ADMIN_USERNAME || 'admin').trim()) {
+      return res.status(400).json({ message: '该账号为超级管理员，已由服务端配置' });
+    }
+
+    const exists = await prisma.admin.findUnique({ where: { username: name } });
+    if (exists) return res.status(409).json({ message: '该管理员账号已存在' });
+
+    const admin = await prisma.admin.create({
+      data: {
+        username: name,
+        password: md5(pwd),
+        displayName: String(displayName || name).trim() || name,
+        role: 'admin', // 不允许通过接口创建超级管理员
+        status: 'active',
+      },
+      select: ADMIN_SELECT,
+    });
+
+    await logAdminAction({
+      admin: req.admin!,
+      action: 'create',
+      module: 'admin',
+      targetId: admin.id,
+      detail: `新增管理员账号「${admin.username}」`,
+      req,
+    });
+    res.status(201).json({ message: '管理员账号创建成功', data: admin });
+  } catch (err) {
+    console.error('创建管理员失败', err);
+    res.status(500).json({ message: '创建管理员失败' });
+  }
+});
+
+// 修改管理员（仅超级管理员：改显示名、启停用、重置密码）
+adminRouter.put('/admins/:id', requireSuperAdmin, async (req: AdminRequest, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '管理员 ID 无效' });
+
+    const admin = await prisma.admin.findUnique({ where: { id } });
+    if (!admin) return res.status(404).json({ message: '管理员账号不存在' });
+
+    const { displayName, status, password } = req.body;
+    const data: any = {};
+
+    if (displayName !== undefined) {
+      const dn = String(displayName).trim();
+      if (!dn) return res.status(400).json({ message: '显示名称不能为空' });
+      data.displayName = dn;
+    }
+    if (status !== undefined) {
+      if (!['active', 'disabled'].includes(status)) {
+        return res.status(400).json({ message: '状态必须是 active 或 disabled' });
+      }
+      if (admin.role === 'super' && status === 'disabled') {
+        return res.status(400).json({ message: '超级管理员不能停用' });
+      }
+      data.status = status;
+    }
+    if (password !== undefined && String(password).length > 0) {
+      const pwd = String(password);
+      if (pwd.length < 6 || pwd.length > 32) {
+        return res.status(400).json({ message: '密码长度需在 6-32 位之间' });
+      }
+      data.password = md5(pwd);
+    }
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ message: '没有要更新的内容' });
+    }
+
+    const updated = await prisma.admin.update({ where: { id }, data, select: ADMIN_SELECT });
+
+    const changes = Object.keys(data)
+      .map(k => (k === 'password' ? '重置密码' : `${k}=${data[k]}`))
+      .join('、');
+    await logAdminAction({
+      admin: req.admin!,
+      action: 'update',
+      module: 'admin',
+      targetId: id,
+      detail: `修改管理员「${admin.username}」：${changes}`,
+      req,
+    });
+    res.json({ message: '管理员账号已更新', data: updated });
+  } catch (err) {
+    console.error('更新管理员失败', err);
+    res.status(500).json({ message: '更新管理员失败' });
+  }
+});
+
+// 删除管理员（仅超级管理员，不能删自己和超级管理员）
+adminRouter.delete('/admins/:id', requireSuperAdmin, async (req: AdminRequest, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: '管理员 ID 无效' });
+    if (id === req.admin!.adminId) return res.status(400).json({ message: '不能删除当前登录的账号' });
+
+    const admin = await prisma.admin.findUnique({ where: { id } });
+    if (!admin) return res.status(404).json({ message: '管理员账号不存在' });
+    if (admin.role === 'super') return res.status(400).json({ message: '超级管理员账号不能删除' });
+
+    await prisma.admin.delete({ where: { id } });
+    await logAdminAction({
+      admin: req.admin!,
+      action: 'delete',
+      module: 'admin',
+      targetId: id,
+      detail: `删除管理员账号「${admin.username}」`,
+      req,
+    });
+    res.json({ message: '管理员账号已删除' });
+  } catch (err) {
+    console.error('删除管理员失败', err);
+    res.status(500).json({ message: '删除管理员失败' });
+  }
+});
+
+// ==================== 管理员操作日志 ====================
+adminRouter.get('/logs', async (req, res) => {
+  try {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 20, 1), 100);
+    const module = req.query.module as string | undefined;
+    const action = req.query.action as string | undefined;
+    const keyword = (req.query.keyword as string)?.trim();
+
+    const where: any = {};
+    if (module && module !== 'all') where.module = module;
+    if (action && action !== 'all') where.action = action;
+    if (keyword) {
+      where.OR = [{ username: { contains: keyword } }, { detail: { contains: keyword } }];
+    }
+
+    const [total, list] = await Promise.all([
+      prisma.adminLog.count({ where }),
+      prisma.adminLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    res.json({ data: { total, list, page, pageSize } });
+  } catch (err) {
+    console.error('获取操作日志失败', err);
+    res.status(500).json({ message: '获取操作日志失败' });
+  }
 });
