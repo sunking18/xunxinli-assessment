@@ -229,23 +229,21 @@ export default function LoveTriPoster() {
         </Link>
         <div className="flex items-center gap-3">
           {enablePairMatch && (
-            <>
-              <button
-                onClick={genPairLink}
-                disabled={busy || pairing}
-                className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:brightness-110 disabled:opacity-60"
-              >
-                {pairing ? '生成中…' : '邀请 TA 一起测 💌'}
-              </button>
-              <button
-                onClick={handleShareToWechat}
-                disabled={busy}
-                className="rounded-full bg-[#07c160] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-green-500/30 transition hover:brightness-110 disabled:opacity-60"
-              >
-                {busy ? '生成中…' : '分享给微信好友'}
-              </button>
-            </>
+            <button
+              onClick={genPairLink}
+              disabled={busy || pairing}
+              className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:brightness-110 disabled:opacity-60"
+            >
+              {pairing ? '生成中…' : '邀请 TA 一起测 💌'}
+            </button>
           )}
+          <button
+            onClick={handleShareToWechat}
+            disabled={busy}
+            className="rounded-full bg-[#07c160] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-green-500/30 transition hover:brightness-110 disabled:opacity-60"
+          >
+            {busy ? '生成中…' : '转发给微信好友'}
+          </button>
           <button
             onClick={handleDownload}
             disabled={busy}

@@ -277,12 +277,6 @@ export default function LoveTriReport({ data, assessmentCode, share, enablePairM
           >
             生成专属分享海报 ✨
           </button>
-          <button
-            onClick={() => responseId && navigate(`/report/${responseId}/poster?share=1`)}
-            className="w-full rounded-xl border border-white/40 bg-white/10 px-4 py-3 text-sm font-semibold text-white shadow backdrop-blur transition hover:bg-white/20"
-          >
-            转发给微信好友 💬
-          </button>
         </div>
       </section>
 
