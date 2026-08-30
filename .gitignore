@@ -12,3 +12,6 @@ coverage/
 .mysql-data/
 *.sock
 
+
+# build cache
+client/tsconfig.tsbuildinfo
