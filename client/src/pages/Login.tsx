@@ -29,7 +29,7 @@ export default function Login() {
 
   useEffect(() => {
     api
-      .get('/api/wechat/config')
+      .get('/wechat/config')
       .then((res) => setWechatConfig(res.data.data))
       .catch(() => setWechatConfig({ enabled: false, skipWechat: true, appId: '' }));
   }, []);
