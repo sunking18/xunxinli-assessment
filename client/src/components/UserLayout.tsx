@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  IconHome, IconClipboardList, IconHistory, IconMenu,
+  IconHome, IconClipboardList, IconHistory, IconMenu, IconUser,
 } from './Icons';
 
 interface MenuItem {
@@ -15,6 +15,7 @@ const MENU: MenuItem[] = [
   { to: '/', label: '全部测评', icon: <IconHome size={20} /> },
   { to: '/pending', label: '待完成', icon: <IconClipboardList size={20} /> },
   { to: '/my', label: '我的报告', icon: <IconHistory size={20} /> },
+  { to: '/profile', label: '个人中心', icon: <IconUser size={20} /> },
 ];
 
 export default function UserLayout() {
@@ -75,7 +76,11 @@ export default function UserLayout() {
         <div className="border-t border-border p-4">
           {user && (
             <div className="mb-3 flex items-center gap-2 px-1">
-              {user.avatar ? (
+              {user.avatar?.startsWith('emoji://') ? (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-lg">
+                  {user.avatar.slice(8)}
+                </div>
+              ) : user.avatar ? (
                 <img src={user.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
               ) : (
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
@@ -123,9 +128,12 @@ export default function UserLayout() {
           {user && (
             <button
               onClick={logout}
-              className="max-w-[80px] truncate text-xs text-text-muted hover:text-primary"
+              className="flex max-w-[100px] items-center gap-1 truncate text-xs text-text-muted hover:text-primary"
             >
-              {user.nickname || user.username}
+              {user.avatar?.startsWith('emoji://') ? (
+                <span>{user.avatar.slice(8)}</span>
+              ) : null}
+              <span>{user.nickname || user.username}</span>
             </button>
           )}
           <button

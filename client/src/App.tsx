@@ -6,6 +6,7 @@ import UserLayout from './components/UserLayout';
 import Home from './pages/Home';
 import UserPending from './pages/UserPending';
 import UserReports from './pages/UserReports';
+import Profile from './pages/Profile';
 import Fill from './pages/Fill';
 import Report from './pages/Report';
 import LoveTriPoster from './pages/lovetri/LoveTriPoster';
@@ -62,6 +63,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/pending" element={<UserPending />} />
               <Route path="/my" element={<UserReports />} />
+              <Route path="/profile" element={<Profile />} />
             </Route>
 
             {/* 测评流程（需登录，保持沉浸） */}

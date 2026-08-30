@@ -14,6 +14,7 @@ interface UserItem {
   birthday: string | null;
   wechatOpenId: string | null;
   wechatName: string | null;
+  status: string;
   role: string;
   createdAt: string;
   updatedAt: string;
@@ -21,6 +22,25 @@ interface UserItem {
 
 type SortField = 'createdAt' | 'updatedAt' | 'id' | 'nickname';
 type SortOrder = 'asc' | 'desc';
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: '全部状态' },
+  { value: 'active', label: '正常' },
+  { value: 'blocked', label: '禁用' },
+  { value: 'deleted', label: '删除' },
+];
+
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'active': return { text: '正常', className: 'bg-green-100 text-green-700' };
+    case 'blocked': return { text: '禁用', className: 'bg-orange-100 text-orange-700' };
+    case 'deleted': return { text: '删除', className: 'bg-red-100 text-red-700' };
+    default: return { text: status, className: 'bg-gray-100 text-gray-700' };
+  }
+};
+
+const avatarToEmoji = (avatar?: string | null) =>
+  avatar?.startsWith('emoji://') ? avatar.slice(8) : null;
 
 const formatDate = (iso: string) => {
   if (!iso) return '-';
@@ -39,6 +59,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
@@ -48,6 +69,7 @@ export default function AdminUsers() {
       .get('/admin/users', {
         params: {
           keyword: keyword.trim() || undefined,
+          status: statusFilter,
           sortBy,
           sortOrder,
         },
@@ -60,19 +82,20 @@ export default function AdminUsers() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, sortOrder]);
+  }, [sortBy, sortOrder, statusFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     load();
   };
 
-  const toggleSort = (field: SortField) => {
-    if (sortBy === field) {
-      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortBy(field);
-      setSortOrder(field === 'createdAt' || field === 'updatedAt' ? 'desc' : 'asc');
+  const handleStatusChange = async (id: number, status: string) => {
+    if (!confirm(`确定将该用户状态改为「${STATUS_OPTIONS.find(s => s.value === status)?.label}」吗？`)) return;
+    try {
+      await api.patch(`/admin/users/${id}/status`, { status });
+      load();
+    } catch (err) {
+      alert(getErrorMessage(err, '状态更新失败'));
     }
   };
 
@@ -83,12 +106,12 @@ export default function AdminUsers() {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-text-primary">用户管理</h1>
-          <div className="text-sm text-text-muted">共 {users.length} 位注册用户 · 含微信授权与邮箱注册</div>
+          <div className="text-sm text-text-muted">共 {users.length} 位用户 · 含微信授权与邮箱注册</div>
         </div>
       </div>
 
-      {/* 搜索与排序 */}
-      <div className="mb-5 flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+      {/* 搜索、状态筛选与排序 */}
+      <div className="mb-5 flex flex-col gap-3 rounded-xl border border-border bg-white p-4 shadow-sm lg:flex-row lg:items-center">
         <form onSubmit={handleSearch} className="relative flex-1">
           <IconSearch size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
@@ -108,7 +131,16 @@ export default function AdminUsers() {
             搜索
           </button>
         </div>
-        <div className="flex items-center gap-2 sm:ml-auto">
+        <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="input py-2 text-sm"
+          >
+            {STATUS_OPTIONS.map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value as SortField)}
@@ -145,62 +177,105 @@ export default function AdminUsers() {
             <table className="w-full text-left text-sm">
               <thead className="bg-background/50 text-text-secondary">
                 <tr>
-                  <th className="cursor-pointer px-4 py-3 font-semibold hover:text-primary" onClick={() => toggleSort('id')}>
+                  <th className="cursor-pointer px-4 py-3 font-semibold hover:text-primary" onClick={() => { if (sortBy === 'id') setSortOrder(p => p === 'asc' ? 'desc' : 'asc'); else setSortBy('id'); }}>
                     用户ID {sortBy === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
                   <th className="px-4 py-3 font-semibold">昵称</th>
                   <th className="px-4 py-3 font-semibold">微信称呼</th>
                   <th className="px-4 py-3 font-semibold">邮箱 / 手机号</th>
+                  <th className="px-4 py-3 font-semibold">状态</th>
                   <th
                     className="cursor-pointer px-4 py-3 font-semibold hover:text-primary"
-                    onClick={() => toggleSort('createdAt')}
+                    onClick={() => { if (sortBy === 'createdAt') setSortOrder(p => p === 'asc' ? 'desc' : 'asc'); else setSortBy('createdAt'); }}
                   >
                     注册时间 {sortBy === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
                   <th
                     className="cursor-pointer px-4 py-3 font-semibold hover:text-primary"
-                    onClick={() => toggleSort('updatedAt')}
+                    onClick={() => { if (sortBy === 'updatedAt') setSortOrder(p => p === 'asc' ? 'desc' : 'asc'); else setSortBy('updatedAt'); }}
                   >
                     更新时间 {sortBy === 'updatedAt' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="px-4 py-3 text-right font-semibold">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {users.map(u => (
-                  <tr key={u.id} className="hover:bg-background/50">
-                    <td className="px-4 py-3 font-mono text-text-secondary">#{u.id}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {u.avatar ? (
-                          <img src={u.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
-                        ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-xs font-bold text-primary">
-                            {(displayNickname(u) || '?').charAt(0).toUpperCase()}
+                {users.map(u => {
+                  const badge = statusBadge(u.status);
+                  const emoji = avatarToEmoji(u.avatar);
+                  return (
+                    <tr key={u.id} className="hover:bg-background/50">
+                      <td className="px-4 py-3 font-mono text-text-secondary">#{u.id}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {emoji ? (
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-lg">
+                              {emoji}
+                            </div>
+                          ) : u.avatar ? (
+                            <img src={u.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-xs font-bold text-primary">
+                              {(displayNickname(u) || '?').charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-text-primary">{displayNickname(u)}</div>
+                            <div className="text-xs text-text-muted">{u.username}</div>
                           </div>
-                        )}
-                        <div>
-                          <div className="font-medium text-text-primary">{displayNickname(u)}</div>
-                          <div className="text-xs text-text-muted">{u.username}</div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.wechatName ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700">
-                          <span>微信</span>
-                          {u.wechatName}
+                      </td>
+                      <td className="px-4 py-3">
+                        {u.wechatName ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700">
+                            <span>微信</span>
+                            {u.wechatName}
+                          </span>
+                        ) : (
+                          <span className="text-text-muted">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-text-secondary">
+                        {u.email || u.phone || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${badge.className}`}>
+                          {badge.text}
                         </span>
-                      ) : (
-                        <span className="text-text-muted">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {u.email || u.phone || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">{formatDate(u.createdAt)}</td>
-                    <td className="px-4 py-3 text-text-secondary">{formatDate(u.updatedAt)}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3 text-text-secondary">{formatDate(u.createdAt)}</td>
+                      <td className="px-4 py-3 text-text-secondary">{formatDate(u.updatedAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {u.status !== 'active' && (
+                            <button
+                              onClick={() => handleStatusChange(u.id, 'active')}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-50"
+                            >
+                              恢复
+                            </button>
+                          )}
+                          {u.status !== 'blocked' && (
+                            <button
+                              onClick={() => handleStatusChange(u.id, 'blocked')}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                            >
+                              禁用
+                            </button>
+                          )}
+                          {u.status !== 'deleted' && (
+                            <button
+                              onClick={() => handleStatusChange(u.id, 'deleted')}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10"
+                            >
+                              删除
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

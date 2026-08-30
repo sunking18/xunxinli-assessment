@@ -66,6 +66,9 @@ authRouter.post('/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: '账号或密码错误' });
     }
+    if (user.status !== 'active') {
+      return res.status(403).json({ message: '账号已被禁用或删除' });
+    }
 
     if (md5(password) !== user.password) {
       // 兼容旧 bcrypt 密码（老用户/admin 初始账号）
@@ -239,6 +242,10 @@ authRouter.post('/wechat-login', async (req, res) => {
       });
     }
 
+    if (user.status !== 'active') {
+      return res.status(403).json({ message: '账号已被禁用或删除' });
+    }
+
     const token = signToken(userToPayload(user));
     res.json({
       message: '登录成功',
@@ -268,13 +275,24 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res) => {
         id: true,
         username: true,
         nickname: true,
-        avatar: true,
-        role: true,
         displayName: true,
+        avatar: true,
+        email: true,
+        phone: true,
+        gender: true,
+        birthday: true,
+        wechatOpenId: true,
+        status: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
     if (!user) {
       return res.status(401).json({ message: '账号不存在' });
+    }
+    if (user.status !== 'active') {
+      return res.status(403).json({ message: '账号已被禁用或删除' });
     }
     res.json({
       message: 'success',
@@ -286,28 +304,34 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// 更新昵称
+// 更新个人资料（目前仅支持更新头像；昵称注册后不可修改）
 authRouter.put('/profile', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { nickname } = req.body;
-    if (!nickname || nickname.trim().length === 0) {
-      return res.status(400).json({ message: '请输入昵称' });
+    const { avatar, nickname } = req.body;
+    const data: any = {};
+    if (avatar !== undefined) data.avatar = avatar;
+    // 昵称仅在尚未设置时允许补充（兼容旧用户）
+    if (nickname !== undefined) {
+      const trimmed = nickname.trim();
+      if (trimmed && !/^\u4e00-\u9fa5a-zA-Z0-9_]{2,20}$/.test(trimmed)) {
+        return res.status(400).json({ message: '昵称格式不正确' });
+      }
+      data.nickname = trimmed || null;
+      data.displayName = trimmed || undefined;
     }
-    if (nickname.trim().length > 20) {
-      return res.status(400).json({ message: '昵称不能超过 20 个字符' });
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ message: '没有要更新的内容' });
     }
 
     const user = await prisma.user.update({
       where: { id: req.user!.userId },
-      data: {
-        nickname: nickname.trim(),
-        displayName: nickname.trim(),
-      },
+      data,
     });
 
     const token = signToken(userToPayload(user));
     res.json({
-      message: '昵称设置成功',
+      message: '资料更新成功',
       data: {
         token,
         user: {
@@ -320,8 +344,46 @@ authRouter.put('/profile', authenticate, async (req: AuthRequest, res) => {
       },
     });
   } catch (err) {
-    console.error('更新昵称失败', err);
-    res.status(500).json({ message: '更新昵称失败' });
+    console.error('更新资料失败', err);
+    res.status(500).json({ message: '更新资料失败' });
+  }
+});
+
+// 修改密码
+authRouter.patch('/password', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: '请填写完整密码信息' });
+    }
+    if (newPassword.length < 6 || newPassword.length > 32) {
+      return res.status(400).json({ message: '新密码长度需在 6-32 位之间' });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: '两次输入的新密码不一致' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    if (!user) return res.status(404).json({ message: '用户不存在' });
+
+    // 校验旧密码
+    const isBcryptHash = /^\$2[aby]\$/.test(user.password);
+    const oldValid = isBcryptHash
+      ? await bcrypt.compare(oldPassword, user.password)
+      : md5(oldPassword) === user.password;
+    if (!oldValid) {
+      return res.status(400).json({ message: '原密码错误' });
+    }
+
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { password: md5(newPassword) },
+    });
+
+    res.json({ message: '密码修改成功' });
+  } catch (err) {
+    console.error('修改密码失败', err);
+    res.status(500).json({ message: '修改密码失败' });
   }
 });
 

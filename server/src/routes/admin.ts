@@ -207,12 +207,13 @@ adminRouter.get('/assessments/:id/qrcode', async (req, res) => {
 });
 
 // ==================== 用户管理 ====================
-// 用户列表：支持按昵称/用户名/显示名搜索，按 createdAt/updatedAt 排序
+// 用户列表：支持按昵称/用户名/显示名搜索，按 createdAt/updatedAt 排序，按 status 筛选
 adminRouter.get('/users', async (req, res) => {
   try {
     const keyword = (req.query.keyword as string)?.trim();
     const sortBy = (req.query.sortBy as string) || 'createdAt';
     const sortOrder = (req.query.sortOrder as string) === 'asc' ? 'asc' : 'desc';
+    const statusFilter = (req.query.status as string) || 'all';
 
     const allowedSortFields = ['id', 'createdAt', 'updatedAt', 'nickname', 'displayName', 'username'];
     const orderField = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
@@ -226,6 +227,9 @@ adminRouter.get('/users', async (req, res) => {
         { email: { contains: keyword } },
         { phone: { contains: keyword } },
       ];
+    }
+    if (statusFilter !== 'all' && ['active', 'blocked', 'deleted'].includes(statusFilter)) {
+      where.status = statusFilter;
     }
 
     const users = await prisma.user.findMany({
@@ -242,6 +246,7 @@ adminRouter.get('/users', async (req, res) => {
         gender: true,
         birthday: true,
         wechatOpenId: true,
+        status: true,
         role: true,
         createdAt: true,
         updatedAt: true,
@@ -258,6 +263,29 @@ adminRouter.get('/users', async (req, res) => {
   } catch (err) {
     console.error('获取用户列表失败', err);
     res.status(500).json({ message: '获取用户列表失败' });
+  }
+});
+
+// 管理员修改用户状态（正常 / 禁用 / 删除）
+adminRouter.patch('/users/:id/status', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { status } = req.body;
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: '用户 ID 无效' });
+    }
+    if (!['active', 'blocked', 'deleted'].includes(status)) {
+      return res.status(400).json({ message: '状态必须是 active、blocked 或 deleted' });
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { status },
+    });
+    res.json({ message: '用户状态已更新' });
+  } catch (err) {
+    console.error('更新用户状态失败', err);
+    res.status(500).json({ message: '更新用户状态失败' });
   }
 });
 

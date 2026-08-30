@@ -27,6 +27,7 @@ interface AuthContextValue {
   register: (data: RegisterData) => Promise<{ token: string; user: User }>;
   wechatLogin: (openid: string, nickname?: string, avatar?: string) => Promise<{ token: string; user: User }>;
   updateNickname: (nickname: string) => Promise<{ token: string; user: User }>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
   setToken: (token: string | null) => void;
 }
@@ -98,6 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { token, user: userData };
   };
 
+  const refreshUser = async () => {
+    const res = await api.get('/auth/me');
+    setUser(res.data.data.user);
+  };
+
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     setAuthHeader(null);
@@ -116,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, wechatLogin, updateNickname, logout, setToken }}
+      value={{ user, loading, login, register, wechatLogin, updateNickname, refreshUser, logout, setToken }}
     >
       {children}
     </AuthContext.Provider>

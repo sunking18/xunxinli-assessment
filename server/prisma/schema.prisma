@@ -19,12 +19,13 @@ model User {
   password     String   // md5 加密后的密码
   displayName  String
   nickname     String?  // 昵称（注册必填，应用层校验唯一性）
-  avatar       String?
+  avatar       String?  // 头像 URL（从系统预置 8 个头像中选择）
   email        String?  // 邮箱（注册补充，应用层校验唯一性）
   phone        String?  // 电话（注册补充，应用层校验唯一性）
   gender       String?  // 性别（注册补充）
   birthday     String?  // 生日（注册补充）
   wechatOpenId String?  @unique
+  status       String   @default("active") // 用户状态：active 正常 / blocked 禁用 / deleted 删除
   role         String   @default("admin")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

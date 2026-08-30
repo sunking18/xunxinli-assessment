@@ -415,14 +415,21 @@ publicRouter.post('/love/unlock', async (req, res) => {
   res.json({ message: '支付成功，已解锁', data: { isPaid: true, orderNo: order.orderNo } });
 });
 
-// 公开查询报告（通过 responseId，无需登录，便于分享）
-publicRouter.get('/responses/:id/report', async (req, res) => {
+// 查询报告（必须登录，且只能查看自己的报告；管理员可查看所有）
+publicRouter.get('/responses/:id/report', authenticate, async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   const response = await prisma.response.findUnique({
     where: { id, status: 'active' },
     include: { assessment: { select: { id: true, code: true, name: true, coverColor: true, icon: true, enablePairMatch: true } } },
   });
   if (!response) return res.status(404).json({ message: '报告不存在或已被删除' });
+
+  const isAdmin = req.user?.role === 'admin';
+  const isOwner = response.userId != null && response.userId === (req.user as any)?.userId;
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({ message: '无权查看该报告' });
+  }
+
   res.json({
     data: {
       responseId: response.id,
