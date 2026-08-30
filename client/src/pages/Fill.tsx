@@ -206,6 +206,12 @@ export default function Fill() {
     }
   };
 
+  // 滚动定位到指定题目
+  const scrollToQuestion = (qid: string) => {
+    const el = document.getElementById(`question-${qid}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const next = () => {
     // love 测评：答完直接提交（跳过基础信息页）
     if (isLove) {
@@ -945,12 +951,26 @@ export default function Fill() {
             <h3 className={`mb-3 text-lg font-bold ${isLove ? 'text-[#e8738c]' : 'text-[#c4705a]'}`}>{isLove ? '请先完成所有题目' : '请完成当前部分'}</h3>
             <p className="mb-3 text-left text-sm text-text-secondary">您还有以下题目未作答：</p>
             <ul className="mb-5 space-y-1 text-left text-sm text-text-primary">
-              {missingModal.numbers.map(n => (
-                <li key={n} className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 rounded-full ${isLove ? 'bg-[#e8738c]' : 'bg-primary'}`} />
-                  第 {n} 题
-                </li>
-              ))}
+              {missingModal.numbers.map(n => {
+                // 题号是 part 内的 1-based 序号，反查题目 id 用于定位
+                const qid = currentPartGroup?.questions[n - 1]?.id;
+                return (
+                  <li key={n}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMissingModal({ open: false, numbers: [] });
+                        if (qid) setTimeout(() => scrollToQuestion(qid), 80);
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 transition ${isLove ? 'hover:bg-[#fff0f4]' : 'hover:bg-orange-50'}`}
+                    >
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isLove ? 'bg-[#e8738c]' : 'bg-primary'}`} />
+                      第 {n} 题
+                      <span className={`ml-auto text-xs ${isLove ? 'text-[#e8738c]' : 'text-primary'}`}>去作答 ›</span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
             <button
               className={`w-full ${isLove ? 'rounded-full bg-gradient-to-r from-[#e8738c] to-[#f2a0b3] py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg' : 'btn-primary'}`}

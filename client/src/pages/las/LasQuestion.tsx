@@ -27,6 +27,7 @@ export default function LasQuestion({ questions, value, onChange, onSubmit, subm
   const [current, setCurrent] = useState(0);
   const [showAlert, setShowAlert] = useState(false);
   const [tip, setTip] = useState<string>('');
+  const [tipKind, setTipKind] = useState<'current' | 'missing' | ''>('');
 
   const q = questions[current];
   const currentVal = value[q.id];
@@ -36,6 +37,8 @@ export default function LasQuestion({ questions, value, onChange, onSubmit, subm
   const canGoNext = currentVal !== undefined;
   const canSubmit = questions.every((q) => value[q.id] !== undefined);
   const missingCount = questions.filter((q) => value[q.id] === undefined).length;
+  // 第一道未作答题目的下标，用于提示时一键跳转
+  const firstMissingIndex = questions.findIndex((q) => value[q.id] === undefined);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -63,15 +66,26 @@ export default function LasQuestion({ questions, value, onChange, onSubmit, subm
     setCurrent((c) => Math.min(questions.length - 1, c + 1));
   };
 
+  // 一键跳到第一道未作答的题目
+  const jumpToMissing = () => {
+    if (firstMissingIndex < 0) return;
+    setCurrent(firstMissingIndex);
+    setTip('');
+    setTipKind('');
+  };
+
   const handleSubmit = () => {
     if (submitting) return;
     if (!canSubmit) {
       if (currentVal === undefined) {
         setTip('请先选择本题答案，再提交问卷');
+        setTipKind('current');
+        setTimeout(() => { setTip(''); setTipKind(''); }, 3000);
       } else if (missingCount > 0) {
-        setTip(`还有 ${missingCount} 道题未作答，请返回补答后再提交`);
+        // 保留提示，等用户点击跳转按钮后再清除
+        setTip(`还有 ${missingCount} 道题未作答`);
+        setTipKind('missing');
       }
-      setTimeout(() => setTip(''), 3000);
       return;
     }
     onSubmit();
@@ -199,9 +213,19 @@ export default function LasQuestion({ questions, value, onChange, onSubmit, subm
           </div>
 
           {isLast && tip && (
-            <p className="mt-3 text-center text-sm font-medium text-rose-500 animate-pulse">
-              {tip}
-            </p>
+            <div className="mt-3 text-center">
+              <p className="text-sm font-medium text-rose-500 animate-pulse">{tip}</p>
+              {tipKind === 'missing' && firstMissingIndex >= 0 && (
+                <button
+                  type="button"
+                  onClick={jumpToMissing}
+                  className="mx-auto mt-2 flex items-center justify-center gap-1.5 rounded-full bg-rose-500 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-rose-200 transition hover:bg-rose-600 active:scale-95"
+                >
+                  前往第 {firstMissingIndex + 1} 题补答
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
