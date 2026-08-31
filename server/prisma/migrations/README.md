@@ -2,11 +2,16 @@
 
 ## 核心原则
 
-**生产库的结构变更一律人工执行，部署脚本不会自动改任何表。**
+自动化的边界很明确：
 
-`deploy.sh` 只做：拉代码 → 构建 → 重启 → 检查表是否齐全（只读）→ 健康检查。
+| 动作 | 是否自动 | 说明 |
+|---|---|---|
+| **建缺失的表** | ✅ 自动 | `deploy.sh` 会调用 `ensureTables.js`，全部是 `CREATE TABLE IF NOT EXISTS`，不影响任何已有数据 |
+| **改已有表结构**（加列/改类型/删列/加索引） | ❌ 人工 | 涉及数据迁移决策，必须人工审查后执行 |
 
-## 为什么不让工具自动改
+`deploy.sh` 流程：拉代码 → 构建 → 补建缺失的表 → 健康检查。
+
+## 为什么改表不让工具自动做
 
 - 自动同步（`db push` / auto-migrate）会自己算 diff 并执行，可能在无人审查的情况下删列、截断数据
 - 结构变更往往伴随数据迁移决策（旧数据填什么、要不要备份），工具猜不出来
@@ -58,10 +63,12 @@ ALTER TABLE `Response` MODIFY COLUMN `userAgent` TEXT NULL;
 CREATE INDEX `Response_source_idx` ON `Response`(`source`);
 ```
 
-### 方式 C：只补建缺失的表（不碰任何已有表）
+### 方式 C：补建缺失的表（不碰任何已有表）
+
+`deploy.sh` 部署时会自动做这件事，也可以手动触发：
 
 ```bash
-# 补建缺失的表
+# 补建缺失的表（幂等，已存在的直接跳过）
 docker compose exec -T server node dist/scripts/ensureTables.js
 
 # 只检查不建（返回 1 表示有表缺失）

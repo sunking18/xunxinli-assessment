@@ -2,12 +2,12 @@
 # 寻心理测评平台 - 一键部署脚本
 # 用法（服务器执行）：cd /data/q.xunxinli && bash deploy.sh
 #
-# ⚠️ 重要：本脚本【不会修改任何数据库结构】。
-# 部署只做：拉代码 → 构建 → 重启 → 检查表是否齐全（只读）→ 健康检查
+# 数据库行为边界（重要）：
+#   ✅ 自动：检测到「缺失的表」会直接建表（CREATE TABLE IF NOT EXISTS，不影响已有数据）
+#   ❌ 不自动：任何修改已有表结构的动作（ALTER TABLE / 加列 / 改类型 / 删列）
+#              一律人工确认后执行，方式见 server/prisma/migrations/README.md
 #
-# 表结构变更一律人工确认后执行，方式见 server/prisma/migrations/README.md：
-#   docker compose exec -T server node dist/scripts/ensureTables.js   # 补建缺失的表
-#   docker compose exec -T mysql mysql -u... -p... q_xunxinli          # 手动执行 ALTER/CREATE
+# 流程：拉代码 → 构建 → 补建缺失的表 → 健康检查
 set -e
 
 cd "$(dirname "$0")"
@@ -38,16 +38,13 @@ echo "===== 3/4 构建前端 ====="
 docker compose up -d --build client
 sleep 5
 
-echo "===== 4/4 表结构巡检（只读）与健康检查 ====="
-echo "--- 表检查 ---"
-if docker compose exec -T server node dist/scripts/ensureTables.js --check; then
-  echo "✅ 所有数据表齐全"
+echo "===== 4/4 补建缺失的数据表（只建表，不改已有表）与健康检查 ====="
+echo "--- 表检查与补建 ---"
+if docker compose exec -T server node dist/scripts/ensureTables.js; then
+  echo "✅ 数据表检查完成"
 else
-  echo ""
-  echo "⚠️  检测到缺失的数据表，部署继续，但相关功能会报错。"
-  echo "    确认无误后，手动执行下面这条补建："
-  echo "    docker compose exec -T server node dist/scripts/ensureTables.js"
-  echo ""
+  echo "⚠️  建表检查执行失败（可能是数据库连接问题），请检查："
+  echo "    docker compose logs --tail=30 server"
 fi
 
 echo "--- 健康检查 ---"
