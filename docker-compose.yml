@@ -8,7 +8,6 @@
 #    与服务器其他项目的 MySQL 互不影响。首次部署执行
 #    docker compose exec server npx prisma db push 建表。
 # 使用: docker compose up -d --build
-version: "3.8"
 
 services:
   # MySQL 数据库（独立容器，与服务器其他项目隔离）
