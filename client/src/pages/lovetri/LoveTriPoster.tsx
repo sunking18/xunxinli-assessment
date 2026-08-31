@@ -347,13 +347,17 @@ export default function LoveTriPoster() {
           >
             {busy ? '生成中…' : '转发给微信好友'}
           </button>
-          <button
-            onClick={handleDownload}
-            disabled={busy}
-            className="rounded-full bg-gradient-to-r from-pink-500 to-violet-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-pink-500/30 transition hover:brightness-110 disabled:opacity-60"
-          >
-            {busy ? '生成中…' : '下载海报'}
-          </button>
+          {/* 微信内两个按钮都会弹出同一个长按预览层，功能重复，故微信内只保留转发按钮。
+              电脑端与手机其他浏览器保留下载按钮（可直接保存到本地/下载目录）。 */}
+          {!isWechat && (
+            <button
+              onClick={handleDownload}
+              disabled={busy}
+              className="rounded-full bg-gradient-to-r from-pink-500 to-violet-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-pink-500/30 transition hover:brightness-110 disabled:opacity-60"
+            >
+              {busy ? '生成中…' : '下载海报'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -531,7 +535,9 @@ export default function LoveTriPoster() {
       <p className="mt-5 text-center text-xs text-white/40">
         {isPC
           ? '电脑端：点「转发给微信好友」复制图片，到微信聊天窗口粘贴发送；点「下载海报」保存到本地'
-          : '手机端：长按海报图片即可保存或转发给朋友'}
+          : isWechat
+            ? '微信内：点「转发给微信好友」，长按海报可保存图片或发送给朋友'
+            : '手机端：点「下载海报」保存到本地，或点「转发给微信好友」分享给好友'}
       </p>
 
       {/* 微信内图片预览弹层
