@@ -1,97 +1,118 @@
-# 数据库迁移说明
+# 数据库结构变更说明
 
-表结构变更**统一走这里**，不要手动去线上库执行 `ALTER TABLE`。
+## 核心原则
 
-## 目录结构
+**生产库的结构变更一律人工执行，部署脚本不会自动改任何表。**
 
-```
-migrations/
-├── 0_init/migration.sql              ← baseline：完整建表语句，只在全新部署时用
-├── 20260831120000_add_xxx/migration.sql   ← 后续每次变更一个目录，按时间戳排序执行
-└── README.md
-```
+`deploy.sh` 只做：拉代码 → 构建 → 重启 → 检查表是否齐全（只读）→ 健康检查。
 
-`0_init` 是 baseline，建表语句已经由 `initdb/01-init-data.sql` 执行过，
-所以部署脚本会把它标记为「已应用」而**不会真的执行**，后续只应用增量。
+## 为什么不让工具自动改
 
-## 核心原理
+- 自动同步（`db push` / auto-migrate）会自己算 diff 并执行，可能在无人审查的情况下删列、截断数据
+- 结构变更往往伴随数据迁移决策（旧数据填什么、要不要备份），工具猜不出来
+- 人工执行 = 看得见、能回滚、时机可控
 
-- `prisma migrate deploy` 会读 `_prisma_migrations` 表，只执行**没执行过**的迁移，幂等
-- Prisma Client 是根据 `schema.prisma` 生成的，**不是**根据真实数据库
-  - schema 有、数据库没有 → 运行时报错（字段不存在）
-  - 数据库有、schema 没有 → 不报错，但代码用不到
-  - 所以：**改 schema 和改数据库必须成对提交**
+## 需要改表结构时：三种方式
 
-## 日常改表流程
+### 方式 A：工具生成 SQL，你审查后手动执行（推荐）
 
-### 方式 A：本地能连数据库（推荐）
+好处：基于线上库**真实结构**做 diff，不会漏也不会错；但执行权始终在你手上。
 
 ```bash
 cd server
 
 # 1. 修改 prisma/schema.prisma
-# 2. 生成迁移文件并应用到本地库（会自动重新生成 Prisma Client）
-npx prisma migrate dev --name add_response_source
 
-# 3. 提交 schema + 迁移文件
-git add prisma/schema.prisma prisma/migrations
-git commit -m "feat: 新增 xxx 字段"
-```
-
-### 方式 B：没有本地库，直接对线上生成差异 SQL
-
-```bash
-cd server
-
-# 1. 修改 prisma/schema.prisma
-# 2. 生成「线上库 → 新 schema」的差异（只读，不会改库）
+# 2. 生成「线上库 → 新 schema」的差异 SQL（只读操作，不会改库）
 npx prisma migrate diff \
   --from-url "mysql://q_xunxinli:密码@服务器IP:3307/q_xunxinli" \
   --to-schema-datamodel prisma/schema.prisma \
   --script > /tmp/migration.sql
 
-# 3. 务必人工审查一遍 SQL（会不会丢数据、默认值合不合理）
+# 3. 人工审查：重点看有没有 DROP COLUMN / 缩短字段长度 / 改字段类型
 cat /tmp/migration.sql
 
-# 4. 保存为迁移文件
-NAME=$(date +%Y%m%d%H%M%S)_add_xxx_field
-mkdir -p prisma/migrations/$NAME
-cp /tmp/migration.sql prisma/migrations/$NAME/migration.sql
-
-# 5. 提交
-git add prisma/schema.prisma prisma/migrations && git commit -m "feat: 新增 xxx 字段"
+# 4. 确认无误后，把 SQL 传到服务器手动执行
+docker compose exec -T mysql mysql \
+  -u"${MYSQL_USER:-q_xunxinli}" -p"${MYSQL_PASSWORD:-xunxinli123}" q_xunxinli < /tmp/migration.sql
 ```
 
-## 部署
+如果 diff 输出为空，说明线上结构已经和 schema 一致，什么都不用做。
+
+### 方式 B：自己写 SQL 直接执行（简单变更）
 
 ```bash
-cd /data/q.xunxinli && bash deploy.sh
+# 进入数据库
+docker compose exec -T mysql mysql \
+  -u"${MYSQL_USER:-q_xunxinli}" -p"${MYSQL_PASSWORD:-xunxinli123}" q_xunxinli
 ```
 
-脚本流程：`拉代码 → 构建启动后端 → 应用迁移 → 巡检补表 → 构建前端 → 健康检查`
+```sql
+-- 加字段
+ALTER TABLE `Response` ADD COLUMN `source` VARCHAR(50) NULL;
 
-## 部署纪律（重要）
+-- 改字段类型（扩大长度安全，缩小会丢数据）
+ALTER TABLE `Response` MODIFY COLUMN `userAgent` TEXT NULL;
 
-| 变更类型 | 顺序 | 原因 |
+-- 加索引
+CREATE INDEX `Response_source_idx` ON `Response`(`source`);
+```
+
+### 方式 C：只补建缺失的表（不碰任何已有表）
+
+```bash
+# 补建缺失的表
+docker compose exec -T server node dist/scripts/ensureTables.js
+
+# 只检查不建（返回 1 表示有表缺失）
+docker compose exec -T server node dist/scripts/ensureTables.js --check
+```
+
+脚本里全部是 `CREATE TABLE IF NOT EXISTS`，**不会 ALTER 任何已存在的表**。
+
+## 改结构前：先备份（必做）
+
+```bash
+docker compose exec -T mysql mysqldump \
+  -u root -p"${MYSQL_ROOT_PASSWORD:-xunxinli_root_2026}" q_xunxinli \
+  > /data/backup_xunxinli_$(date +%F_%H%M).sql
+
+ls -lh /data/backup_xunxinli_*.sql
+```
+
+出问题时的回滚：
+
+```bash
+docker compose exec -T mysql mysql \
+  -u"${MYSQL_USER:-q_xunxinli}" -p"${MYSQL_PASSWORD:-xunxinli123}" q_xunxinli \
+  < /data/backup_xunxinli_20260831_1200.sql
+```
+
+## 部署纪律
+
+| 变更类型 | 正确顺序 | 原因 |
 |---|---|---|
-| 加字段 / 加表 | 先迁移数据库，再部署代码 | 老代码不认识新字段但不影响运行 |
-| 删字段 / 改字段名 | **先部署代码不再依赖该字段，下次部署再删字段** | 否则老代码访问已删字段会直接报错 |
-| 字段改类型（如 varchar→text） | 直接迁移，注意确认不会截断数据 | 扩大长度安全，缩小长度会丢数据 |
+| 加字段 / 加表 | 先改库，再部署代码 | 老代码不认识新字段，但不影响运行 |
+| 删字段 / 改字段名 | **先部署不再依赖该字段的代码，下次再改库** | 否则老代码访问已删字段直接报错 |
+| 改字段类型 | 确认不会截断数据 | 扩大长度安全，缩小长度会丢数据 |
 
-## 禁止事项
+## 关于 `0_init/migration.sql`
 
-- 不要手动在线上库 `ALTER TABLE`（会导致迁移历史与实际结构不一致，后续迁移失败）
-- 不要用 `prisma db push` 同步生产库（它会做 diff 并可能删列，且不留记录）
-- 不要修改已经执行过的迁移文件内容（只新增迁移，不改写历史）
+这是**当前完整结构的快照**，用途：
 
-## 出问题怎么办
+- 全新部署时参考（实际建表仍由 `initdb/*.sql` 完成）
+- 需要时从中取用建表语句
 
-迁移失败时 `migrate deploy` 会明确报错并停止部署，服务仍可正常访问（旧代码 + 旧结构）。
+**它不会被自动执行**，只是留档参考。
+
+## 检查线上结构与 schema 是否一致
 
 ```bash
-# 查看迁移状态
-docker compose exec -T server npx prisma migrate status
-
-# 查看失败的迁移
-docker compose logs --tail=50 server
+# 输出为空 = 完全一致
+npx prisma migrate diff \
+  --from-url "mysql://q_xunxinli:密码@服务器IP:3307/q_xunxinli" \
+  --to-schema-datamodel prisma/schema.prisma \
+  --script
 ```
+
+建议每次部署前跑一次，有输出就说明需要人工处理。
