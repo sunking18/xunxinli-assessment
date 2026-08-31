@@ -91,6 +91,13 @@ export default function LoveTriPoster() {
   const [pairing, setPairing] = useState(false);
   const [copiedPair, setCopiedPair] = useState(false);
   const [enablePairMatch, setEnablePairMatch] = useState(false);
+  // 微信内图片预览弹层：mode=save 引导长按保存，mode=share 引导长按转发
+  const [preview, setPreview] = useState<{
+    url: string;
+    blob: Blob;
+    fileName: string;
+    mode: 'save' | 'share';
+  } | null>(null);
 
   // 生成「邀请 TA 一起测」配对链接
   const genPairLink = async () => {
@@ -142,8 +149,9 @@ export default function LoveTriPoster() {
   const isWechat = /MicroMessenger/i.test(ua);
   const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Windows Phone|HarmonyOS/i.test(ua);
   const isPC = !isWechat && !isMobile;
+  const isAndroid = /Android|HarmonyOS/i.test(ua);
 
-  // 统一的 Blob 下载/打开辅助：微信内会进入图片预览，方便长按保存/转发
+  // 下载辅助：仅用于电脑浏览器和安卓系统浏览器（微信内不可靠，已改用预览弹层）
   const openBlob = (blob: Blob, fileName: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -154,6 +162,16 @@ export default function LoveTriPoster() {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
+
+  // Blob 转 base64：iOS 微信对 blob: URL 支持不稳定，
+  // 长按保存菜单只对 <img> 的 dataURL 生效，必须用这个而不是 blob URL
+  const blobToDataURL = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('图片转换失败'));
+      reader.readAsDataURL(blob);
+    });
 
   // 电脑端：把图片复制到剪贴板，用户可直接粘贴到微信聊天窗口
   const copyImageToClipboard = async (blob: Blob): Promise<boolean> => {
@@ -183,10 +201,11 @@ export default function LoveTriPoster() {
         return;
       }
 
-      // 微信内置浏览器：a[download] 会打开大图预览，长按即可存入相册
+      // 微信内置浏览器：网页无权写入相册，a[download] 也无效。
+      // 改为弹出真实 <img> 大图，用户长按后系统菜单里选「保存图片」。
       if (isWechat) {
-        openBlob(blob, fileName);
-        setTimeout(() => alert('请长按图片，选择「保存到手机」即可存入相册'), 400);
+        const dataUrl = await blobToDataURL(blob);
+        setPreview({ url: dataUrl, blob, fileName, mode: 'save' });
         return;
       }
 
@@ -221,13 +240,11 @@ export default function LoveTriPoster() {
         return;
       }
 
-      // 微信内置浏览器：大图预览，长按或右上角菜单转发（iOS 走右上角 ⋯）
+      // 微信内置浏览器：navigator.share(files) 在微信内支持不稳定（容易闪退），
+      // 同样改用大图预览 —— 长按菜单里「保存图片」和「发送给朋友」都有。
       if (isWechat) {
-        openBlob(blob, fileName);
-        setTimeout(
-          () => alert('请长按图片选择「转发给朋友」；若是 iPhone，可点右上角 ⋯ → 发送给朋友'),
-          400,
-        );
+        const dataUrl = await blobToDataURL(blob);
+        setPreview({ url: dataUrl, blob, fileName, mode: 'share' });
         return;
       }
 
@@ -516,6 +533,56 @@ export default function LoveTriPoster() {
           ? '电脑端：点「转发给微信好友」复制图片，到微信聊天窗口粘贴发送；点「下载海报」保存到本地'
           : '手机端：长按海报图片即可保存或转发给朋友'}
       </p>
+
+      {/* 微信内图片预览弹层
+          微信 H5 没有写入相册的 API，只能引导用户长按 <img> 调起系统菜单。
+          注意：这里绝不能加 select-none / pointer-events-none / touch-callout:none，
+          否则长按菜单会被屏蔽。 */}
+      {preview && (
+        <div
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 px-5 py-8"
+          onClick={() => setPreview(null)}
+        >
+          <p className="mb-4 text-center text-sm font-medium leading-relaxed text-white">
+            {preview.mode === 'save'
+              ? '长按下方图片，选择「保存图片」即可存入相册'
+              : '长按下方图片，选择「发送给朋友」即可转发'}
+          </p>
+
+          <img
+            src={preview.url}
+            alt="爱情三角分享海报"
+            className="max-h-[68vh] w-auto max-w-full rounded-xl object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+
+          <div className="mt-6 flex w-full max-w-xs flex-col gap-3">
+            {isAndroid && (
+              <button
+                className="w-full rounded-full bg-white/15 py-3 text-sm font-medium text-white transition active:bg-white/25"
+                onClick={e => {
+                  e.stopPropagation();
+                  openBlob(preview.blob, preview.fileName);
+                }}
+              >
+                下载到手机（存到「下载」目录）
+              </button>
+            )}
+            <button
+              className="w-full rounded-full bg-white py-3 text-sm font-semibold text-gray-900 transition active:bg-white/80"
+              onClick={() => setPreview(null)}
+            >
+              关闭
+            </button>
+          </div>
+
+          <p className="mt-4 text-center text-xs leading-relaxed text-white/50">
+            {preview.mode === 'save'
+              ? 'iPhone 保存后可在「照片」App 中查看'
+              : 'iPhone 也可点击图片右上角 ⋯ 选择发送给朋友'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
