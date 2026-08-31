@@ -37,12 +37,13 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3001
-# 注意：只建表（db push），不执行 db seed。
-# 业务数据（测评定义、题目、报告模板等）统一由 initdb/*.sql 初始化，
-# 避免 seed.ts 里的硬编码旧数据覆盖 SQL 导入的最新内容。
 #
-# ⚠️ 关键：db push 绝不能阻塞服务启动。
-# 之前写的是 `prisma db push && node dist/index.js`，一旦 db push 失败或卡在交互确认上，
-# node 永远不会启动，所有 /api 请求全部 502（页面能打开、提交就挂）。
-# 现在改为：加超时 + 失败也继续启动，保证建表失败时站点仍可正常访问。
-CMD ["sh", "-c", "timeout 90 npx prisma db push --skip-generate || echo '[warn] prisma db push 未成功，跳过建表继续启动服务'; exec node dist/index.js"]
+# 启动即服务，不做任何建表动作。
+# 原因：之前是 `prisma db push && node dist/index.js`，把「建表」和「启动服务」绑在一起，
+# 一旦 db push 慢 / 失败 / 卡在交互确认，node 就永远起不来，全站 /api 502。
+# 现在两者彻底分离：
+#   - 服务启动：只跑 node（本行）
+#   - 建表补表：单独执行 `node dist/scripts/ensureTables.js`（幂等，缺失才建）
+#              需要同步字段时再加 --sync（内部调用 prisma db push）
+# 业务数据（测评定义/题目/报告模板）仍由 initdb/*.sql 初始化，不执行 seed。
+CMD ["node", "dist/index.js"]

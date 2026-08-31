@@ -10,6 +10,9 @@
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
+    "db:ensure": "node dist/scripts/ensureTables.js",
+    "db:check": "node dist/scripts/ensureTables.js --check",
+    "db:sync": "node dist/scripts/ensureTables.js --sync",
     "db:seed": "prisma db seed",
     "seed:assessments": "tsx prisma/seed.ts"
   },
