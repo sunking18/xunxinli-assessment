@@ -79,8 +79,9 @@ CREATE TABLE `Response` (
   `wechatInfo` text COLLATE utf8mb4_unicode_ci,
   `respondentInfo` text COLLATE utf8mb4_unicode_ci,
   `duration` int(11) DEFAULT NULL,
-  `ipAddress` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `userAgent` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ipAddress` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  -- 微信 / 鸿蒙内置浏览器 UA 可长达数百字符，必须 TEXT（varchar(191) 会写入失败）
+  `userAgent` text COLLATE utf8mb4_unicode_ci,
   `mode` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `pairCode` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `isPaid` tinyint(1) NOT NULL DEFAULT '0',

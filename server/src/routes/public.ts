@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../utils/prisma';
 import { computeAssessmentScore } from '../services/scoring';
@@ -32,6 +32,18 @@ function jsonOrUndefined(value: any): string | undefined {
 // 生成订单号
 function genOrderNo(): string {
   return `LX${Date.now()}${Math.floor(Math.random() * 9000 + 1000)}`;
+}
+
+/**
+ * 统一捕获 async 路由中的异常并交给 errorHandler 返回 500。
+ * Express 4 不会自动捕获 async 抛出的错误，未捕获的 Promise rejection 会直接
+ * 让 Node 进程退出（曾因 userAgent 超长导致提交接口崩溃、全站 502）。
+ * 所有写操作的 async 路由都必须用它包裹。
+ */
+function asyncHandler(fn: (req: AuthRequest, res: Response) => Promise<any>) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    fn(req, res).catch(next);
+  };
 }
 
 // 规范化 IP 展示：
@@ -140,7 +152,7 @@ publicRouter.get('/assessments/:code', async (req, res) => {
 // 提交答卷：计分 + 生成个性化报告 + 落库（需要登录）
 // love 测评支持 mode：free=免费版(12题) / deep=深度版(36题) / partner=伴侣版(12题)
 // 双人匹配：pairCode 关联两份答卷；深度版续答：rid 复用免费版已答 12 题
-publicRouter.post('/assessments/:code/respond', authenticate, async (req: AuthRequest, res) => {
+publicRouter.post('/assessments/:code/respond', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const { answers, duration, respondentName, wechatInfo, respondentInfo, mode, pairCode, rid } = req.body;
 
   const assessment = await prisma.assessment.findUnique({ where: { code: req.params.code } });
@@ -230,7 +242,9 @@ publicRouter.post('/assessments/:code/respond', authenticate, async (req: AuthRe
       respondentInfo: jsonOrUndefined(respondentInfo),
       duration: duration || null,
       ipAddress: getClientIp(req),
-      userAgent: req.headers['user-agent'] || null,
+      // 微信 / 鸿蒙等内置浏览器 UA 可长达数百字符，必须截断：
+      // 早期 userAgent 是 varchar(191)，写入超长 UA 会抛 P2000 并导致进程崩溃（全站 502）
+      userAgent: (req.headers['user-agent'] || '').slice(0, 1000) || null,
       ...(isLove ? { mode: loveMode } : {}),
       ...(pairCode ? { pairCode } : {}),
     },
@@ -253,10 +267,10 @@ publicRouter.post('/assessments/:code/respond', authenticate, async (req: AuthRe
       mode: response.mode,
     },
   });
-});
+}));
 
 // 生成双人配对邀请码：A 作答后点"邀请 TA 一起测"调用（love / lovetri 通用）
-publicRouter.post('/love/pair', authenticate, async (req: AuthRequest, res) => {
+publicRouter.post('/love/pair', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const { responseId } = req.body;
   if (!responseId) return res.status(400).json({ message: '缺少 responseId' });
   const response = await prisma.response.findUnique({
@@ -271,10 +285,10 @@ publicRouter.post('/love/pair', authenticate, async (req: AuthRequest, res) => {
     return res.status(403).json({ message: '双人匹配暂未开放' });
   }
   res.json({ data: { pairCode, inviteLink: `/fill/${code}?pair=${pairCode}` } });
-});
+}));
 
 // 生成分享码（lovetri）：海报/链接分享用，方便后台追踪分享行为
-publicRouter.post('/lovetri/share', authenticate, async (req: AuthRequest, res) => {
+publicRouter.post('/lovetri/share', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const { responseId } = req.body;
   if (!responseId) return res.status(400).json({ message: '缺少 responseId' });
   const response = await prisma.response.findUnique({ where: { id: Number(responseId), status: 'active' } });
@@ -289,7 +303,7 @@ publicRouter.post('/lovetri/share', authenticate, async (req: AuthRequest, res) 
   res.json({
     data: { shareCode, sharedAt, shareUrl: `/report/${response.id}` },
   });
-});
+}));
 
 // 查询双人匹配报告（love）：pairCode 下两份答卷都完成后生成
 publicRouter.get('/love/match/:pairCode', async (req, res) => {
@@ -416,7 +430,7 @@ publicRouter.post('/love/unlock', async (req, res) => {
 });
 
 // 查询报告（必须登录，且只能查看自己的报告；管理员可查看所有）
-publicRouter.get('/responses/:id/report', authenticate, async (req: AuthRequest, res) => {
+publicRouter.get('/responses/:id/report', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   const response = await prisma.response.findUnique({
     where: { id, status: 'active' },
@@ -450,7 +464,7 @@ publicRouter.get('/responses/:id/report', authenticate, async (req: AuthRequest,
       answers: parseJson<any>(response.answers),
     },
   });
-});
+}));
 
 // 用户根据本地保存的 responseId 批量查询报告概要
 publicRouter.post('/my/responses', async (req, res) => {
@@ -494,7 +508,7 @@ publicRouter.post('/my/responses', async (req, res) => {
 });
 
 // 按当前登录用户查询所有答卷（替代前端 localStorage 方案，保证数据一致）
-publicRouter.get('/my/reports', authenticate, async (req: AuthRequest, res) => {
+publicRouter.get('/my/reports', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const userId = (req.user as any)?.userId;
   if (!userId) {
     return res.status(401).json({ message: '请先登录' });
@@ -542,10 +556,10 @@ publicRouter.get('/my/reports', authenticate, async (req: AuthRequest, res) => {
   const doneCodes = Array.from(new Set(data.map(r => r.assessmentCode)));
 
   res.json({ data: { reports, doneCodes } });
-});
+}));
 
 // 用户删除自己的答卷记录（软删除，状态改为 user_deleted）
-publicRouter.patch('/my/responses/:id', authenticate, async (req: AuthRequest, res) => {
+publicRouter.patch('/my/responses/:id', authenticate, asyncHandler(async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   const userId = (req.user as any)?.userId;
   const { status } = req.body;
@@ -567,4 +581,4 @@ publicRouter.patch('/my/responses/:id', authenticate, async (req: AuthRequest, r
     return res.json({ message: '答卷已恢复' });
   }
   return res.status(400).json({ message: '不支持的状态操作' });
-});
+}));

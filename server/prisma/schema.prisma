@@ -114,8 +114,10 @@ model Response {
   wechatInfo       String?  @db.Text
   respondentInfo   String?  @db.Text
   duration         Int?
-  ipAddress       String?
-  userAgent       String?
+  ipAddress       String?  @db.VarChar(255)
+  // 微信 / 鸿蒙等内置浏览器的 UA 可长达数百字符，必须用 TEXT，
+  // 默认的 varchar(191) 会写入失败（Prisma P2000）并导致进程崩溃
+  userAgent       String?  @db.Text
   // 爱情测评（love）扩展
   mode           String?    // free=免费版 / deep=深度版 / partner=伴侣版
   pairCode       String?    // 双人匹配邀请码

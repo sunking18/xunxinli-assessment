@@ -8,6 +8,16 @@ import { publicRouter } from './routes/public';
 import { adminRouter } from './routes/admin';
 import { wechatRouter } from './routes/wechat';
 
+// 兜底：未捕获的异常 / Promise rejection 只记录日志，绝不退出进程。
+// 事件：微信内置浏览器 UA 超长 → Prisma 写入报 P2000 → 未捕获的 rejection 直接打死
+// Node 进程 → nginx upstream 连接被提前关闭 → 全站 /api 502。
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err: any) => {
+  console.error('[uncaughtException]', err);
+});
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
