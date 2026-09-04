@@ -72,10 +72,11 @@ wechatRouter.get('/web-callback', async (req, res) => {
     const userInfo: any = await infoRes.json();
 
     const unionId = tokenData.unionid || userInfo.unionid || '';
+    // 公众号绑定开放平台后 unionid 正常返回，扫码与手机端为同一账号；
+    // 个别账号因隐私设置可能拿不到 unionid，此时退化为网站应用 openid（web_ 前缀）
+    // 识别账号，不阻断登录（该类账号与公众号端暂不互通）。
     if (!unionId) {
-      return res.status(400).json({
-        message: '未获取到 unionid，请确认网站应用与公众号已绑定同一微信开放平台账号',
-      });
+      console.warn('[扫码登录] 未获取到 unionid，该账号将以网站应用 openid 识别，暂与公众号端不互通');
     }
 
     const base = process.env.CLIENT_URL || 'http://localhost:5173';

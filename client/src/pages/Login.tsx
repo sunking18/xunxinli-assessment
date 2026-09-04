@@ -1,32 +1,65 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, getErrorMessage } from '../api/client';
-import { IconQrCode } from '../components/Icons';
+import { IconQrCode, IconUser } from '../components/Icons';
+
+declare global {
+  interface Window {
+    WxLogin?: new (options: Record<string, unknown>) => void;
+  }
+}
+
+type LoginView = 'qr' | 'wechat' | 'account';
+
+interface WechatConfig {
+  enabled: boolean;
+  skipWechat: boolean;
+  appId: string;
+  webLoginEnabled: boolean;
+  webAppId?: string;
+}
+
+/** 从 returnUrl 提取测评 code 作为 state（如 /fill/lovetri → lovetri），其他情况返回空 */
+function stateFor(url: string): string {
+  const m = url.match(/^\/fill\/([^/?]+)/);
+  return m ? m[1] : '';
+}
+
+/** 动态加载微信扫码 JS（内嵌二维码） */
+function loadWxScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.WxLogin) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://res.wx.qq.com/connect/zh_CN/htmledition/js/wxLogin.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('微信脚本加载失败'));
+    document.body.appendChild(s);
+  });
+}
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading, login, register, wechatLogin, setToken } = useAuth();
+  const { user, loading, login, wechatLogin } = useAuth();
 
-  const [tab, setTab] = useState<'wechat' | 'account'>('wechat');
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  // 运行环境：手机微信内 / 电脑浏览器 / 手机其他浏览器
+  const ua = navigator.userAgent;
+  const isWechat = /MicroMessenger/i.test(ua);
+  const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Windows Phone|HarmonyOS/i.test(ua);
+  const isPC = !isWechat && !isMobile;
+
+  // 视图：qr=PC扫码二维码（默认） / wechat=手机微信授权 / account=账号登录（老用户）
+  const [view, setView] = useState<LoginView>(isWechat ? 'wechat' : isPC ? 'qr' : 'account');
+
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [gender, setGender] = useState('');
-  const [birthday, setBirthday] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [wechatConfig, setWechatConfig] = useState<{
-    enabled: boolean;
-    skipWechat: boolean;
-    appId: string;
-    webLoginEnabled: boolean;
-  } | null>(null);
+  const [qrError, setQrError] = useState('');
+  const [qrKey, setQrKey] = useState(0);
+
+  const [wechatConfig, setWechatConfig] = useState<WechatConfig | null>(null);
 
   const params = new URLSearchParams(location.search);
   const returnUrl = params.get('returnUrl') || '/';
@@ -39,7 +72,9 @@ export default function Login() {
     api
       .get('/wechat/config')
       .then((res) => setWechatConfig(res.data.data))
-      .catch(() => setWechatConfig({ enabled: false, skipWechat: true, appId: '', webLoginEnabled: false }));
+      .catch(() =>
+        setWechatConfig({ enabled: false, skipWechat: true, appId: '', webLoginEnabled: false }),
+      );
   }, []);
 
   // 已登录则跳回
@@ -49,7 +84,7 @@ export default function Login() {
     }
   }, [user, loading, navigate, returnUrl]);
 
-  // 处理微信授权回调参数
+  // 微信授权回调（手机授权 & PC 扫码都会带这些参数回来）：自动建立登录态
   useEffect(() => {
     if (!wxOpenid) return;
     let cancelled = false;
@@ -57,6 +92,7 @@ export default function Login() {
     wechatLogin(wxOpenid, wxUnionId || undefined, wxNickname || undefined, wxAvatar || undefined)
       .then(({ user: u }) => {
         if (cancelled) return;
+        // 微信昵称已作为账号昵称；仅当微信未返回昵称时才需要手动设置
         if (!u.nickname) {
           navigate(`/set-nickname?returnUrl=${encodeURIComponent(returnUrl)}`, { replace: true });
         } else {
@@ -67,43 +103,64 @@ export default function Login() {
         if (cancelled) return;
         setError(getErrorMessage(err));
       })
-      .finally(() => setSubmitting(false));
+      .finally(() => {
+        if (!cancelled) setSubmitting(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [wxOpenid, wxUnionId, wxNickname, wxAvatar, returnUrl, navigate, wechatLogin]);
 
-  const validateNickname = (value: string) => {
-    if (!value.trim()) return '请输入昵称';
-    if (value.length < 2 || value.length > 20) return '昵称长度需在 2-20 位之间';
-    if (!/[\u4e00-\u9fa5a-zA-Z0-9_]{2,20}/.test(value)) {
-      return '昵称仅支持中文、英文、数字和下划线';
+  // PC 内嵌微信扫码二维码
+  useEffect(() => {
+    if (view !== 'qr' || !wechatConfig?.webLoginEnabled) return;
+    let cancelled = false;
+    setQrError('');
+
+    loadWxScript()
+      .then(() => {
+        if (cancelled || !window.WxLogin) return;
+        const box = document.getElementById('wx-login-iframe');
+        if (box) box.innerHTML = ''; // 重新渲染前清空旧 iframe
+        new window.WxLogin({
+          self_redirect: false, // 扫码确认后整页跳转到回调地址
+          id: 'wx-login-iframe',
+          appid: wechatConfig.webAppId || wechatConfig.appId,
+          scope: 'snsapi_login',
+          redirect_uri: encodeURIComponent(`${window.location.origin}/api/wechat/web-callback`),
+          state: stateFor(returnUrl),
+          style: 'black',
+          href: '',
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setQrError('二维码加载失败，请点击刷新或使用账号登录');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, wechatConfig, qrKey, returnUrl]);
+
+  // 手机微信：跳转公众号网页授权
+  const handleWechatLogin = () => {
+    setError('');
+    if (!wechatConfig?.enabled) {
+      setError('微信登录暂未开启，请使用账号登录');
+      return;
     }
-    return '';
+    window.location.href = `/api/wechat/authorize?state=${stateFor(returnUrl)}`;
   };
 
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (mode === 'register') {
-      const nicknameErr = validateNickname(nickname);
-      if (nicknameErr) return setError(nicknameErr);
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError('请输入有效的邮箱地址');
-      if (!/^1[3-9]\d{9}$/.test(phone)) return setError('请输入有效的 11 位手机号');
-      if (password.length < 6 || password.length > 32) return setError('密码长度需在 6-32 位之间');
-      if (password !== confirmPassword) return setError('两次输入的密码不一致');
-    } else {
-      if (!account.trim()) return setError('请输入邮箱或手机号');
-      if (!password) return setError('请输入密码');
-    }
+    if (!account.trim()) return setError('请输入邮箱或手机号');
+    if (!password) return setError('请输入密码');
 
     setSubmitting(true);
     try {
-      const { user: u } = mode === 'register'
-        ? await register({ nickname, email, phone, password, confirmPassword, gender, birthday })
-        : await login(account, password);
-      // 账号注册/登录成功后直接返回目标页
+      await login(account.trim(), password);
       navigate(returnUrl, { replace: true });
     } catch (err: any) {
       setError(getErrorMessage(err));
@@ -112,39 +169,11 @@ export default function Login() {
     }
   };
 
-  // 电脑浏览器：跳转微信开放平台扫码登录
-  const handleWebScanLogin = () => {
-    const state = encodeURIComponent(returnUrl.replace('/fill/', ''));
-    window.location.href = `/api/wechat/web-authorize?state=${state}`;
-  };
-
-  const handleWechatLogin = async () => {
+  // 是否显示右上角切换入口（手机系统浏览器只有账号登录，不显示）
+  const showToggle = isPC || isWechat;
+  const toggleView = () => {
     setError('');
-    if (wechatConfig?.enabled) {
-      // 真实微信授权：跳转到后端授权入口，由后端拼接 redirect_uri 并跳转到微信
-      const state = encodeURIComponent(returnUrl.replace('/fill/', ''));
-      window.location.href = `/api/wechat/authorize?state=${state}`;
-      return;
-    }
-    // 本地模拟登录
-    if (!nickname.trim()) {
-      setError('请输入昵称后再登录');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const openid = `wx_mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const { user: u } = await wechatLogin(openid, nickname.trim());
-      if (!u.nickname) {
-        navigate(`/set-nickname?returnUrl=${encodeURIComponent(returnUrl)}`, { replace: true });
-      } else {
-        navigate(returnUrl, { replace: true });
-      }
-    } catch (err: any) {
-      setError(getErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
+    setView((v) => (v === 'account' ? (isWechat ? 'wechat' : 'qr') : 'account'));
   };
 
   return (
@@ -155,252 +184,138 @@ export default function Login() {
           <p className="mt-2 text-sm text-text-muted">登录后即可开始测评</p>
         </div>
 
-        <div className="card overflow-hidden p-0">
-          <div className="flex border-b border-border">
+        <div className="card relative overflow-hidden p-8">
+          {/* 右上角切换：二维码登录 ⇄ 账号登录 */}
+          {showToggle && (
             <button
               type="button"
-              onClick={() => setTab('wechat')}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                tab === 'wechat' ? 'border-b-2 border-primary text-primary' : 'text-text-muted hover:text-text-primary'
-              }`}
+              onClick={toggleView}
+              className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10"
             >
-              微信登录
+              {view === 'account' ? (
+                <>
+                  <IconQrCode size={13} /> 扫码登录
+                </>
+              ) : (
+                <>
+                  <IconUser size={13} /> 账号登录
+                </>
+              )}
             </button>
-            <button
-              type="button"
-              onClick={() => setTab('account')}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                tab === 'account' ? 'border-b-2 border-primary text-primary' : 'text-text-muted hover:text-text-primary'
-              }`}
-            >
-              账号登录
-            </button>
-          </div>
+          )}
 
-          <div className="p-6">
-            {error && (
-              <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-                {error}
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+          )}
+
+          {/* ===== PC 微信扫码二维码 ===== */}
+          {view === 'qr' && (
+            <div className="flex flex-col items-center">
+              <h2 className="text-lg font-bold text-text-primary">二维码登录</h2>
+
+              {wechatConfig === null ? (
+                <div className="my-10 h-56 w-56 animate-pulse rounded-lg bg-background" />
+              ) : wechatConfig.webLoginEnabled ? (
+                <>
+                  <div
+                    id="wx-login-iframe"
+                    className="my-6 flex h-[300px] w-[280px] items-center justify-center"
+                  />
+                  {qrError && <p className="mb-2 text-xs text-red-500">{qrError}</p>}
+                  <button
+                    type="button"
+                    onClick={() => setQrKey((k) => k + 1)}
+                    className="text-xs text-text-muted transition hover:text-primary"
+                  >
+                    刷新二维码
+                  </button>
+                </>
+              ) : (
+                <div className="my-10 text-center">
+                  <p className="text-sm text-text-secondary">微信扫码登录暂未开启</p>
+                  <button
+                    type="button"
+                    onClick={toggleView}
+                    className="mt-3 text-sm font-medium text-primary hover:underline"
+                  >
+                    使用账号登录 →
+                  </button>
+                </div>
+              )}
+
+              <p className="mt-6 text-xs text-text-muted">微信扫码 · 安全登录</p>
+              <p className="mt-1.5 text-center text-xs leading-relaxed text-text-muted/80">
+                新用户扫码后自动创建账号（使用微信昵称）
+                <br />
+                与手机微信登录为同一账号
+              </p>
+            </div>
+          )}
+
+          {/* ===== 手机微信内授权登录 ===== */}
+          {view === 'wechat' && (
+            <div className="flex flex-col items-center py-4">
+              <h2 className="text-lg font-bold text-text-primary">微信登录</h2>
+              <p className="mb-6 mt-2 text-center text-xs leading-relaxed text-text-muted">
+                将跳转至微信授权页面
+                <br />
+                授权后与电脑扫码登录为同一账号
+              </p>
+              <button
+                type="button"
+                onClick={handleWechatLogin}
+                disabled={submitting || !wechatConfig?.enabled}
+                className="btn-primary w-full"
+              >
+                {submitting ? '跳转中...' : '微信授权登录'}
+              </button>
+              {!wechatConfig?.enabled && (
+                <p className="mt-3 text-xs text-text-muted">微信登录暂未开启，请使用账号登录</p>
+              )}
+            </div>
+          )}
+
+          {/* ===== 账号登录（仅存量账号，已停止开放注册）===== */}
+          {view === 'account' && (
+            <form onSubmit={handleAccountSubmit} className="space-y-4">
+              <h2 className="text-lg font-bold text-text-primary">账号登录</h2>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-text-primary">
+                  邮箱 / 手机号
+                </label>
+                <input
+                  type="text"
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  placeholder="请输入邮箱或手机号"
+                  className="input w-full"
+                  required
+                />
               </div>
-            )}
-
-            {tab === 'wechat' ? (
-              <div className="space-y-4">
-                {wechatConfig?.enabled ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleWechatLogin}
-                      disabled={submitting}
-                      className="btn-primary w-full"
-                    >
-                      {submitting ? '跳转中...' : '微信登录'}
-                    </button>
-                    <p className="text-center text-sm text-text-muted">
-                      点击按钮将跳转至微信授权页面
-                    </p>
-
-                    {wechatConfig.webLoginEnabled && (
-                      <>
-                        <div className="flex items-center gap-3 text-xs text-text-muted">
-                          <span className="h-px flex-1 bg-border" />
-                          <span>或</span>
-                          <span className="h-px flex-1 bg-border" />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleWebScanLogin}
-                          disabled={submitting}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-60"
-                        >
-                          <IconQrCode size={16} />
-                          微信扫码登录
-                        </button>
-                        <p className="text-center text-xs text-text-muted">
-                          电脑浏览器可用，扫码后即登录同一账号
-                        </p>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">
-                        昵称 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={nickname}
-                        onChange={(e) => setNickname(e.target.value)}
-                        placeholder="请输入您的昵称"
-                        className="input w-full"
-                      />
-                      <p className="mt-1 text-xs text-text-muted">本地测试：输入昵称后点击下方按钮即可模拟微信登录</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleWechatLogin}
-                      disabled={submitting}
-                      className="btn-primary w-full"
-                    >
-                      {submitting ? '登录中...' : '微信登录（本地模拟）'}
-                    </button>
-                    <p className="text-center text-xs text-text-muted">正式上线后配置微信 AppID 即可跳转授权</p>
-                  </>
-                )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-text-primary">密码</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="请输入密码"
+                  className="input w-full"
+                  required
+                />
               </div>
-            ) : (
-              <form onSubmit={handleAccountSubmit} className="space-y-4">
-                {mode === 'login' ? (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">邮箱 / 手机号</label>
-                      <input
-                        type="text"
-                        value={account}
-                        onChange={(e) => setAccount(e.target.value)}
-                        placeholder="请输入邮箱或手机号"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">密码</label>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="请输入密码"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <button type="submit" disabled={submitting} className="btn-primary w-full">
-                      {submitting ? '登录中...' : '登录'}
-                    </button>
-                    <div className="flex justify-center gap-4 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode('register');
-                          setError('');
-                        }}
-                        className="text-primary hover:underline"
-                      >
-                        没有账号？去注册
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">
-                        昵称 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={nickname}
-                        onChange={(e) => setNickname(e.target.value)}
-                        placeholder="2-20 位，支持中文、英文、数字和下划线"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">
-                        邮箱 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="example@email.com"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">
-                        手机号 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="13800138000"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">性别</label>
-                      <select
-                        value={gender}
-                        onChange={(e) => setGender(e.target.value)}
-                        className="input w-full"
-                      >
-                        <option value="">请选择</option>
-                        <option value="male">男</option>
-                        <option value="female">女</option>
-                        <option value="other">其他</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">生日</label>
-                      <input
-                        type="date"
-                        value={birthday}
-                        onChange={(e) => setBirthday(e.target.value)}
-                        className="input w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">
-                        密码 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="6-32 位密码"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-text-primary">
-                        确认密码 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="再次输入密码"
-                        className="input w-full"
-                        required
-                      />
-                    </div>
-                    <button type="submit" disabled={submitting} className="btn-primary w-full">
-                      {submitting ? '注册中...' : '注册并登录'}
-                    </button>
-                    <div className="flex justify-center text-xs">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode('login');
-                          setError('');
-                        }}
-                        className="text-primary hover:underline"
-                      >
-                        已有账号？去登录
-                      </button>
-                    </div>
-                  </>
-                )}
-              </form>
-            )}
-          </div>
+              <button type="submit" disabled={submitting} className="btn-primary w-full">
+                {submitting ? '登录中...' : '登录'}
+              </button>
+              <p className="text-center text-xs leading-relaxed text-text-muted">
+                新用户请使用微信扫码登录（已停止账号注册）
+              </p>
+            </form>
+          )}
         </div>
+
+        <p className="mt-6 text-center text-xs text-text-muted">
+          扫码登录遇到问题？可切换右上角「账号登录」
+        </p>
       </div>
     </div>
   );
