@@ -241,21 +241,17 @@ export default function Login() {
           {/* ===== PC 微信扫码二维码 ===== */}
           {view === 'qr' && (
             <div className="flex flex-col items-center">
-              <h2 className="text-lg font-bold text-text-primary">二维码登录</h2>
-
               {wechatConfig === null ? (
                 <div className="my-10 h-56 w-56 animate-pulse rounded-lg bg-background" />
               ) : wechatConfig.webLoginEnabled ? (
                 <>
-                  <div
-                    id="wx-login-iframe"
-                    className="mt-8 mb-4 flex h-[420px] w-[300px] items-center justify-center"
-                  />
+                  {/* 容器高度由微信 iframe 实际高度撑开，避免固定高度造成大片留白 */}
+                  <div id="wx-login-iframe" className="mt-2 w-[300px]" />
                   {qrError && <p className="mb-2 text-xs text-red-500">{qrError}</p>}
                   <button
                     type="button"
                     onClick={() => setQrKey((k) => k + 1)}
-                    className="text-xs text-text-muted transition hover:text-primary"
+                    className="mt-1 text-xs text-text-muted transition hover:text-primary"
                   >
                     刷新二维码
                   </button>
@@ -273,15 +269,13 @@ export default function Login() {
                 </div>
               )}
 
-              <p className="mt-6 text-xs text-text-muted">微信扫码 · 安全登录</p>
+              <p className="mt-3 text-xs text-text-muted">微信扫码 · 安全登录</p>
             </div>
           )}
 
           {/* ===== 手机微信内：快捷登录（直接展示微信头像昵称 + 绿色按钮）===== */}
           {view === 'wechat' && (
             <div className="flex flex-col items-center py-2">
-              <h2 className="mb-6 text-lg font-bold text-text-primary">微信快捷登录</h2>
-
               {/* 微信账号卡片：头像 + 昵称 */}
               <div className="flex w-full items-center gap-3 rounded-xl bg-background p-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-xl">
