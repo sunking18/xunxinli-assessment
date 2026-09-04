@@ -280,10 +280,7 @@ export default function Login() {
           {/* ===== 手机微信内：快捷登录（直接展示微信头像昵称 + 绿色按钮）===== */}
           {view === 'wechat' && (
             <div className="flex flex-col items-center py-2">
-              <h2 className="text-lg font-bold text-text-primary">微信快捷登录</h2>
-              <p className="mb-6 mt-2 text-center text-xs text-text-muted">
-                与电脑端扫码登录为同一账号
-              </p>
+              <h2 className="mb-6 text-lg font-bold text-text-primary">微信快捷登录</h2>
 
               {/* 微信账号卡片：头像 + 昵称 */}
               <div className="flex w-full items-center gap-3 rounded-xl bg-background p-4">
