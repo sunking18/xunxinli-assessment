@@ -61,6 +61,18 @@ export default function Login() {
 
   const [wechatConfig, setWechatConfig] = useState<WechatConfig | null>(null);
 
+  // 上次登录过的微信资料（头像/昵称），用于微信内「快捷登录」卡片展示
+  const [lastProfile, setLastProfile] = useState<{ nickname?: string | null; avatar?: string | null } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wx_last_profile');
+      if (raw) setLastProfile(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const params = new URLSearchParams(location.search);
   const returnUrl = params.get('returnUrl') || '/';
   const wxOpenid = params.get('wx_openid');
@@ -92,6 +104,15 @@ export default function Login() {
     wechatLogin(wxOpenid, wxUnionId || undefined, wxNickname || undefined, wxAvatar || undefined)
       .then(({ user: u }) => {
         if (cancelled) return;
+        // 记住本次微信资料，下次打开登录页可直接展示头像 + 昵称
+        try {
+          localStorage.setItem(
+            'wx_last_profile',
+            JSON.stringify({ nickname: u.nickname, avatar: u.avatar }),
+          );
+        } catch {
+          /* ignore */
+        }
         // 微信昵称已作为账号昵称；仅当微信未返回昵称时才需要手动设置
         if (!u.nickname) {
           navigate(`/set-nickname?returnUrl=${encodeURIComponent(returnUrl)}`, { replace: true });
@@ -146,7 +167,7 @@ export default function Login() {
   const handleWechatLogin = () => {
     setError('');
     if (!wechatConfig?.enabled) {
-      setError('微信登录暂未开启，请使用账号登录');
+      setError('微信登录暂未开启，请联系管理员');
       return;
     }
     window.location.href = `/api/wechat/authorize?state=${stateFor(returnUrl)}`;
@@ -169,8 +190,9 @@ export default function Login() {
     }
   };
 
-  // 是否显示右上角切换入口（手机系统浏览器只有账号登录，不显示）
-  const showToggle = isPC || isWechat;
+  // 右上角切换入口仅 PC 显示（二维码登录 ⇄ 账号登录）
+  // 微信内必然是登录态，直接快捷登录，不再提供账号/扫码选项
+  const showToggle = isPC;
   const toggleView = () => {
     setError('');
     setView((v) => (v === 'account' ? (isWechat ? 'wechat' : 'qr') : 'account'));
@@ -245,25 +267,51 @@ export default function Login() {
             </div>
           )}
 
-          {/* ===== 手机微信内授权登录 ===== */}
+          {/* ===== 手机微信内：快捷登录（直接展示微信头像昵称 + 绿色按钮）===== */}
           {view === 'wechat' && (
-            <div className="flex flex-col items-center py-4">
-              <h2 className="text-lg font-bold text-text-primary">微信登录</h2>
-              <p className="mb-6 mt-2 text-center text-xs leading-relaxed text-text-muted">
-                将跳转至微信授权页面
-                <br />
-                授权后与电脑扫码登录为同一账号
+            <div className="flex flex-col items-center py-2">
+              <h2 className="text-lg font-bold text-text-primary">微信快捷登录</h2>
+              <p className="mb-6 mt-2 text-center text-xs text-text-muted">
+                与电脑端扫码登录为同一账号
               </p>
+
+              {/* 微信账号卡片：头像 + 昵称 */}
+              <div className="flex w-full items-center gap-3 rounded-xl bg-background p-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-xl">
+                  {lastProfile?.avatar ? (
+                    lastProfile.avatar.startsWith('emoji://') ? (
+                      <span>{lastProfile.avatar.slice(8)}</span>
+                    ) : (
+                      <img src={lastProfile.avatar} alt="" className="h-full w-full object-cover" />
+                    )
+                  ) : (
+                    <IconUser size={22} className="text-primary" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-base font-semibold text-text-primary">
+                    {lastProfile?.nickname || '微信用户'}
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    {lastProfile?.nickname ? '上次登录的微信账号' : '点击下方按钮授权登录'}
+                  </div>
+                </div>
+              </div>
+
+              {/* 微信品牌绿快捷登录按钮 */}
               <button
                 type="button"
                 onClick={handleWechatLogin}
                 disabled={submitting || !wechatConfig?.enabled}
-                className="btn-primary w-full"
+                className="mt-6 w-full rounded-xl bg-[#07c160] py-3 text-base font-semibold text-white shadow-lg shadow-green-500/20 transition hover:brightness-105 disabled:opacity-60"
               >
-                {submitting ? '跳转中...' : '微信授权登录'}
+                {submitting ? '登录中...' : '微信快捷登录'}
               </button>
+
               {!wechatConfig?.enabled && (
-                <p className="mt-3 text-xs text-text-muted">微信登录暂未开启，请使用账号登录</p>
+                <p className="mt-3 text-center text-xs text-text-muted">
+                  微信登录暂未开启，请联系管理员
+                </p>
               )}
             </div>
           )}
