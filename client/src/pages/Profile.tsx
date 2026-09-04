@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getErrorMessage } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
-import { IconLock, IconLogout, IconUser } from '../components/Icons';
+import { IconLogout, IconUser } from '../components/Icons';
 
 interface UserProfile {
   id: number;
@@ -48,12 +48,6 @@ export default function Profile() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [oldPassword, setOldPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [pwdSubmitting, setPwdSubmitting] = useState(false);
-
   useEffect(() => {
     api.get('/auth/me')
       .then(res => setProfile(res.data.data.user))
@@ -70,29 +64,6 @@ export default function Profile() {
       await refreshUser();
     } catch (err) {
       alert(getErrorMessage(err, '头像更新失败'));
-    }
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword.length < 6 || newPassword.length > 32) {
-      return alert('新密码长度需在 6-32 位之间');
-    }
-    if (newPassword !== confirmPassword) {
-      return alert('两次输入的新密码不一致');
-    }
-    setPwdSubmitting(true);
-    try {
-      await api.patch('/auth/password', { oldPassword, newPassword, confirmPassword });
-      alert('密码修改成功');
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setShowPassword(false);
-    } catch (err) {
-      alert(getErrorMessage(err, '密码修改失败'));
-    } finally {
-      setPwdSubmitting(false);
     }
   };
 
@@ -195,60 +166,6 @@ export default function Profile() {
           })}
         </div>
         <p className="mt-2 text-xs text-text-muted">昵称注册后不可修改，头像可从上方 8 个系统头像中切换。</p>
-      </div>
-
-      {/* 修改密码 */}
-      <div className="card mt-5 p-5">
-        <button
-          onClick={() => setShowPassword(v => !v)}
-          className="flex w-full items-center justify-between"
-        >
-          <span className="flex items-center gap-2 text-base font-semibold text-text-primary">
-            <IconLock size={18} className="text-primary" />
-            重置密码
-          </span>
-          <span className="text-sm text-text-muted">{showPassword ? '收起' : '展开'}</span>
-        </button>
-
-        {showPassword && (
-          <form onSubmit={handlePasswordSubmit} className="mt-4 space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-text-primary">原密码</label>
-              <input
-                type="password"
-                value={oldPassword}
-                onChange={e => setOldPassword(e.target.value)}
-                className="input w-full"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-text-primary">新密码</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                className="input w-full"
-                required
-                minLength={6}
-                maxLength={32}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-text-primary">确认新密码</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                className="input w-full"
-                required
-              />
-            </div>
-            <button type="submit" disabled={pwdSubmitting} className="btn-primary w-full">
-              {pwdSubmitting ? '保存中...' : '确认修改'}
-            </button>
-          </form>
-        )}
       </div>
 
       {/* 退出登录 */}
