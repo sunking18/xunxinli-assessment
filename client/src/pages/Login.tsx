@@ -79,6 +79,16 @@ export default function Login() {
   const wxUnionId = params.get('wx_unionid');
   const wxNickname = params.get('wx_nickname');
   const wxAvatar = params.get('wx_avatar');
+  // 静默授权回传：wx_profile_* 为后端识别出的老用户资料，wx_silent=found/checked
+  const profileOpenid = params.get('wx_profile_openid') || '';
+  const profileNickname = params.get('wx_profile_nickname') || '';
+  const profileAvatar = params.get('wx_profile_avatar') || '';
+  const wxSilent = params.get('wx_silent') || '';
+
+  // 快捷登录卡片展示的资料：优先静默授权从后端带回的，其次本地缓存，最后默认占位
+  const displayName = profileNickname || lastProfile?.nickname || null;
+  const displayAvatar = profileAvatar || lastProfile?.avatar || null;
+  const identified = wxSilent === 'found' || !!profileOpenid;
 
   useEffect(() => {
     api
@@ -105,6 +115,18 @@ export default function Login() {
       navigate(returnUrl, { replace: true });
     }
   }, [user, loading, navigate, returnUrl]);
+
+  // 微信内打开登录页：自动走 snsapi_base 静默授权识别老用户（用户无感知、不弹窗）
+  // - 识别到账号 → 带资料回本页展示真实头像昵称 + 登录按钮
+  // - 识别不到（首次使用）→ 展示默认占位，点击按钮后再走完整授权
+  // wx_silent 有值说明刚完成过一次静默识别，不再重复跳转，避免死循环
+  useEffect(() => {
+    if (!isWechat || view !== 'wechat') return;
+    if (!wechatConfig?.enabled) return;
+    if (loading || user) return;
+    if (wxOpenid || wxSilent) return;
+    window.location.href = `/api/wechat/silent-authorize?state=${stateFor(returnUrl)}`;
+  }, [isWechat, view, wechatConfig, loading, user, wxOpenid, wxSilent, returnUrl]);
 
   // 微信授权回调（手机授权 & PC 扫码都会带这些参数回来）：自动建立登录态
   useEffect(() => {
@@ -276,14 +298,14 @@ export default function Login() {
           {/* ===== 手机微信内：快捷登录（直接展示微信头像昵称 + 绿色按钮）===== */}
           {view === 'wechat' && (
             <div className="flex flex-col items-center py-2">
-              {/* 微信账号卡片：头像 + 昵称 */}
+              {/* 微信账号卡片：头像 + 昵称（静默识别到的老用户显示真实资料） */}
               <div className="flex w-full items-center gap-3 rounded-xl bg-background p-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-xl">
-                  {lastProfile?.avatar ? (
-                    lastProfile.avatar.startsWith('emoji://') ? (
-                      <span>{lastProfile.avatar.slice(8)}</span>
+                  {displayAvatar ? (
+                    displayAvatar.startsWith('emoji://') ? (
+                      <span>{displayAvatar.slice(8)}</span>
                     ) : (
-                      <img src={lastProfile.avatar} alt="" className="h-full w-full object-cover" />
+                      <img src={displayAvatar} alt="" className="h-full w-full object-cover" />
                     )
                   ) : (
                     <IconUser size={22} className="text-primary" />
@@ -291,10 +313,10 @@ export default function Login() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-base font-semibold text-text-primary">
-                    {lastProfile?.nickname || '微信用户'}
+                    {displayName || '微信用户'}
                   </div>
                   <div className="text-xs text-text-muted">
-                    {lastProfile?.nickname ? '上次登录的微信账号' : '点击下方按钮授权登录'}
+                    {identified ? '点击下方按钮即可登录' : '首次使用，点击下方按钮授权登录'}
                   </div>
                 </div>
               </div>

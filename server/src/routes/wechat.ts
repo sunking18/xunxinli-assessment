@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { prisma } from '../utils/prisma';
 
 export const wechatRouter = Router();
 
@@ -96,6 +97,82 @@ wechatRouter.get('/web-callback', async (req, res) => {
     res.redirect(`${base}/login?${params.toString()}`);
   } catch (e: any) {
     res.status(500).json({ message: '微信扫码登录异常: ' + e.message });
+  }
+});
+
+// 微信内静默授权（snsapi_base）：用户无感知，仅用于识别「已授权过的老用户」。
+// 已有账号 → 带用户资料回登录页展示头像昵称 + 登录按钮；
+// 首次用户 → 回登录页展示默认占位，点击按钮后再走 snsapi_userinfo 完整授权。
+wechatRouter.get('/silent-authorize', async (req, res) => {
+  const appId = process.env.WECHAT_APP_ID;
+  if (!appId) {
+    return res.status(501).json({ message: '微信配置未启用' });
+  }
+
+  const redirectBase = process.env.PUBLIC_BASE_URL || process.env.CLIENT_URL || '';
+  const redirectUri = encodeURIComponent(`${redirectBase}/api/wechat/silent-callback`);
+  const encodedState = encodeURIComponent((req.query.state as string) || '');
+
+  const wxUrl =
+    `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${appId}` +
+    `&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_base&state=${encodedState}#wechat_redirect`;
+
+  res.redirect(wxUrl);
+});
+
+// 静默授权回调：snsapi_base 只返回 openid / unionid，拿不到昵称头像，
+// 所以这里用 openid 去用户表查已有账号的资料回传展示。
+wechatRouter.get('/silent-callback', async (req, res) => {
+  const { code } = req.query;
+  const base = process.env.CLIENT_URL || '/';
+  if (!code) {
+    return res.redirect(`${base}/login?wx_error=cancelled`);
+  }
+
+  const appId = process.env.WECHAT_APP_ID;
+  const secret = process.env.WECHAT_APP_SECRET;
+  if (!appId || !secret) {
+    return res.status(501).json({ message: '微信配置未启用' });
+  }
+
+  try {
+    const tokenRes = await fetch(
+      `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${appId}&secret=${secret}&code=${code}&grant_type=authorization_code`
+    );
+    const tokenData: any = await tokenRes.json();
+    const openid: string = tokenData.openid || '';
+    const unionId: string = tokenData.unionid || '';
+    if (tokenData.errcode || !openid) {
+      return res.redirect(`${base}/login?wx_silent=checked`);
+    }
+
+    // openid / unionid 识别已有账号（兼容 PC 扫码建的 web_ 前缀账号）
+    let user = unionId
+      ? await prisma.user.findFirst({ where: { wechatUnionId: unionId } })
+      : null;
+    if (!user) {
+      user = await prisma.user.findUnique({ where: { wechatOpenId: openid } });
+    }
+
+    const params = new URLSearchParams();
+    const target = req.query.state || '';
+    if (target) params.set('returnUrl', `/fill/${target}`);
+
+    if (user) {
+      // 已有账号：带资料回登录页展示
+      params.set('wx_profile_openid', user.wechatOpenId || openid);
+      params.set('wx_profile_nickname', user.nickname || '');
+      params.set('wx_profile_avatar', user.avatar || '');
+      params.set('wx_silent', 'found');
+    } else {
+      // 首次访问：展示默认占位，等用户点击按钮走完整授权
+      params.set('wx_silent', 'checked');
+    }
+
+    res.redirect(`${base}/login?${params.toString()}`);
+  } catch (e: any) {
+    console.error('微信静默授权失败', e);
+    res.redirect(`${base}/login?wx_silent=checked`);
   }
 });
 
