@@ -89,6 +89,16 @@ export default function Login() {
       );
   }, []);
 
+  // 用户在微信里取消授权：后端重定向回 ?wx_error=cancelled，这里提示并清掉该参数
+  useEffect(() => {
+    if (params.get('wx_error') !== 'cancelled') return;
+    setError('您取消了微信授权，无法登录，请重新点击「微信快捷登录」');
+    const next = new URLSearchParams(location.search);
+    next.delete('wx_error');
+    const qs = next.toString();
+    navigate(qs ? `/login?${qs}` : '/login', { replace: true });
+  }, [location.search, navigate, params]);
+
   // 已登录则跳回
   useEffect(() => {
     if (!loading && user) {

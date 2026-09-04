@@ -49,7 +49,12 @@ wechatRouter.get('/web-authorize', async (req, res) => {
 // 网站应用扫码登录回调：用网站应用 AppID/Secret 换取 unionid 与用户信息
 wechatRouter.get('/web-callback', async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).json({ message: '缺少授权码' });
+  // 用户在微信里点「取消授权」时回调不带 code：
+  // 跳回登录页给友好提示，而不是甩一段 JSON 到用户屏幕上
+  if (!code) {
+    const base = process.env.CLIENT_URL || '/';
+    return res.redirect(`${base}/login?wx_error=cancelled`);
+  }
 
   const webAppId = process.env.WECHAT_WEB_APP_ID;
   const webAppSecret = process.env.WECHAT_WEB_APP_SECRET;
@@ -115,7 +120,12 @@ wechatRouter.get('/authorize', async (req, res) => {
 // 微信 OAuth 回调（线上对接公众号网页授权后换取用户信息）
 wechatRouter.get('/oauth/callback', async (req, res) => {
   const { code } = req.query;
-  if (!code) return res.status(400).json({ message: '缺少授权码' });
+  // 用户在微信里点「取消授权」时回调不带 code：
+  // 跳回登录页给友好提示，而不是甩一段 JSON 到用户屏幕上
+  if (!code) {
+    const base = process.env.CLIENT_URL || '/';
+    return res.redirect(`${base}/login?wx_error=cancelled`);
+  }
 
   const appId = process.env.WECHAT_APP_ID;
   const secret = process.env.WECHAT_APP_SECRET;
