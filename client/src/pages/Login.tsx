@@ -187,21 +187,19 @@ export default function Login() {
         <div className="card relative overflow-hidden p-8">
           {/* 右上角切换：二维码登录 ⇄ 账号登录 */}
           {showToggle && (
-            <button
-              type="button"
-              onClick={toggleView}
-              className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10"
-            >
-              {view === 'account' ? (
-                <>
-                  <IconQrCode size={13} /> 扫码登录
-                </>
-              ) : (
-                <>
-                  <IconUser size={13} /> 账号登录
-                </>
-              )}
-            </button>
+            <div className="absolute right-4 top-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleView}
+                className="flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10"
+              >
+                {view === 'account' ? '扫码登录' : '账号登录'}
+                <span aria-hidden className="text-[10px] leading-none">▸</span>
+              </button>
+              <span className="text-primary/80">
+                {view === 'account' ? <IconQrCode size={20} /> : <IconUser size={20} />}
+              </span>
+            </div>
           )}
 
           {error && (
@@ -244,11 +242,6 @@ export default function Login() {
               )}
 
               <p className="mt-6 text-xs text-text-muted">微信扫码 · 安全登录</p>
-              <p className="mt-1.5 text-center text-xs leading-relaxed text-text-muted/80">
-                新用户扫码后自动创建账号（使用微信昵称）
-                <br />
-                与手机微信登录为同一账号
-              </p>
             </div>
           )}
 
@@ -312,10 +305,6 @@ export default function Login() {
             </form>
           )}
         </div>
-
-        <p className="mt-6 text-center text-xs text-text-muted">
-          扫码登录遇到问题？可切换右上角「账号登录」
-        </p>
       </div>
     </div>
   );
