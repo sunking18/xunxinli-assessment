@@ -217,7 +217,7 @@ export default function Login() {
                 <>
                   <div
                     id="wx-login-iframe"
-                    className="my-6 flex h-[300px] w-[280px] items-center justify-center"
+                    className="mt-8 mb-4 flex h-[420px] w-[300px] items-center justify-center"
                   />
                   {qrError && <p className="mb-2 text-xs text-red-500">{qrError}</p>}
                   <button
