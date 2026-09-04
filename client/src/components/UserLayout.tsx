@@ -127,13 +127,20 @@ export default function UserLayout() {
         <div className="flex items-center gap-2">
           {user && (
             <button
-              onClick={logout}
-              className="flex max-w-[100px] items-center gap-1 truncate text-xs text-text-muted hover:text-primary"
+              onClick={() => navigate('/profile')}
+              title="进入个人中心"
+              className="flex max-w-[120px] items-center gap-1.5 truncate text-xs text-text-muted transition hover:text-primary"
             >
               {user.avatar?.startsWith('emoji://') ? (
-                <span>{user.avatar.slice(8)}</span>
-              ) : null}
-              <span>{user.nickname || user.username}</span>
+                <span className="text-base leading-none">{user.avatar.slice(8)}</span>
+              ) : user.avatar ? (
+                <img src={user.avatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+              ) : (
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                  {(user.nickname || user.username || 'U').charAt(0)}
+                </span>
+              )}
+              <span className="truncate">{user.nickname || user.username}</span>
             </button>
           )}
           <button
