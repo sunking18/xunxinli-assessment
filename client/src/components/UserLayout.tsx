@@ -75,7 +75,11 @@ export default function UserLayout() {
 
         <div className="border-t border-border p-4">
           {user && (
-            <div className="mb-3 flex items-center gap-2 px-1">
+            <div
+              onClick={() => navigate('/profile')}
+              title="进入个人中心"
+              className="mb-3 flex cursor-pointer items-center gap-2 rounded-xl px-1 py-1.5 transition hover:bg-background"
+            >
               {user.avatar?.startsWith('emoji://') ? (
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-lg">
                   {user.avatar.slice(8)}
@@ -90,7 +94,10 @@ export default function UserLayout() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-text-primary">{user.nickname || user.username}</div>
                 <button
-                  onClick={logout}
+                  onClick={e => {
+                    e.stopPropagation();
+                    logout();
+                  }}
                   className="text-xs text-text-muted hover:text-primary"
                 >
                   退出登录
